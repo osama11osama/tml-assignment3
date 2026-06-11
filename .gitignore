@@ -1,0 +1,44 @@
+# Private repo — _private/ IS tracked (learning docs, plans, notebooks)
+
+# Secrets
+.env
+.env.local
+!.env.example
+*.pem
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# Large data and model weights (download from HuggingFace locally)
+data/
+*.npz
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+.cache/
+
+# IDE and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Training outputs (keep structure via .gitkeep when added)
+results/checkpoints/
+results/logs/*.log
+
+# Report build artifacts (keep LaTeX sources)
+report/*.aux
+report/*.log
+report/*.out
+report/*.toc
+report/*.bbl
+report/*.blg

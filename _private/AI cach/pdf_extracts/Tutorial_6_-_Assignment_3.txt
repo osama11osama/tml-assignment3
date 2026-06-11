@@ -1,0 +1,145 @@
+TRUSTWORTHY MACHINE
+LEARNING 2026 
+Tutorial - 6 
+Adam Dziedzic & Franziska Boenisch 
+Maitri Shah | 03.06.2026
+Assignment 3 requires a ZIP submission on CMS in additio n to the leaderboard 
+ submission 
+The ZIP must contain: 
+A report (max 2 pages, ICLR template, no abstract) with your matriculation 
+ number, CMS team ID, approach description, leaderboard results, and a 
+ conclusion on practical implications of adversarial vulnerabilities. 
+Every experiment mentioned in the report must have corresponding clean and
+documented code in the repository. 
+A  README only explaining how to reproduce your best leaderboard result 
+No model weights or large artifacts. 
+Video Link:   here 
+Deadline for both leaderboard and CMS: 16.06.2026 at 23:59. No exceptions. 
+ANNOUNCEMENTS 
+Page 2 of 19
+Recap: Adversarial ML 
+Page 3 of 19
+Page 4 of 19
+Page 5 of 19
+Page 6 of 19
+Understanding the Assignment 
+( Robustness )
+A d v e r s a r i a l l y  
+t r a i n
+S u b m i t
+s t a t e _ d i c t ( )  
+a s  . p t
+R o b u s t
+C l a s s i f i e r
+t r a i n . n p z E v a l u a t i o n
+ s e r v e r  ( o u r  e n d )
+You are given train.npz: 50,000 labeled images, shape 3x32x32 (channels x 
+height x width), across 9 classes 
+Train a robust image classiﬁer using ResNet-18, 34, or 50 that can defend 
+its elf against adversarial examples 
+Submit the state dict (model weights) of your trained model as a .pt ﬁle 
+Your Task:   
+Page 7 of 19
+We load your model  and run adversarial attacks on our side to check how 
+ robust it is. 
+You do not know the exact attack parameters used on the server. 
+The goal is genuine  robustness, not overﬁtting to one speciﬁc attack. 
+Strict requirement:  your model must achieve clean accuracy above 50%  on our
+test set. What c lean accuracy means is explained in the evaluation metric. 
+What Happens on Our End:   
+Page 8 of 19
+A d v e r s a r i a l l y  
+t r a i n
+S u b m i t
+s t a t e _ d i c t ( )  
+a s  . p t
+R o b u s t
+C l a s s i f i e r
+t r a i n . n p z E v a l u a t i o n
+ s e r v e r  ( o u r  e n d )
+Output shape must  be 9 raw logits, one per class. 
+Input s hape must be 3x32x32. 
+Submit the state dict only, not the full model instance. 
+Specify which architecture you used: resnet18, resnet34, or resnet50. 
+How exactly to submit is covered in the code walkthrough. 
+Submission Requirements 
+Page 9 of 19
+A d v e r s a r i a l l y  
+t r a i n
+S u b m i t
+s t a t e _ d i c t ( )  
+a s  . p t
+R o b u s t
+C l a s s i f i e r
+t r a i n . n p z E v a l u a t i o n
+ s e r v e r  ( o u r  e n d )
+Train an image classiﬁer that is robust against adversarial attacks 
+Higher score = more robust model 
+Clean accuracy must be above 50% or your submission is rejected 
+What you submit - model state dict and nameof the model architecture you
+used. 
+Public leaderboard = 30% of test data. Private leaderboard = remaining 70%.
+Don't overﬁt to the public score. 
+Deadline: 16/06/2025 23:59 
+Your Task:   
+Page 10 of 19
+Evaluation Metric 
+Page 11 of 19
+Metric 
+Page 12 of 19
+Clean accuracy: 
+The model is inferenced on
+unperturbed test images. 
+Robustness accuracy: 
+The model is inferenced on
+adversarially perturbed test images
+generated server-side. 
+Both are equally weighted in the final score.
+Tradeoff between clean accuracy and robust accuracy
+Improving robustness typically comes at the cost of clean accuracy
+Clean accuracy (%)
+Robust accuracy (%)
+High
+Low
+Low High
+Standard training
+High clean, near-zero robust
+Adversarial training
+Lower clean, meaningful robust
+Trade-off  
+Page 13 of 19
+Code Walkthrough
+(task_template.py & submission.py)
+Page 14 of 19
+How to Submit 
+Page 15 of 19
+API_KEY = "YOUR_API_KEY_HERE"      # your team's API key
+MODEL_PATH = "PATH/TO/YOUR/MODEL.pt"  # path to your saved state dict
+MODEL_NAME = "resnet18"            # resnet18, resnet34, or resnet50
+Set these three ﬁelds in  submission.py  before running: 
+Requirements:   
+MODEL_NAME must match the architecture of the state dict you are 
+ submitting 
+One submission every 60 minutes 
+If your submission fails due to an error on your side, cooldown is only 2 
+ minutes 
+Attacks
+Page 16 of 19
+FGSM Adversarial Training 
+Generate adversarial examples using a single gradient step and train on them: 
+Where ε is the perturbation budget, and ∇ ₓ  L is the gradient of the loss with 
+respect to the input. Fast to compute but produces weaker adversarial 
+examples. A good starting point. 
+Baseline Attacks 
+Page 17 of 19
+
+PGD Adversarial Training 
+Generate adversarial examples using multiple iterative steps, projecting back 
+into the ε-ball after each step: 
+Where α is the step size and S is the allowed perturbation set. Stronger 
+adversarial examples during training lead to a more robust model. 
+Baseline Attacks 
+Page 18 of 19
+
+Questions?
+Page 19 of 19

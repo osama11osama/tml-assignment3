@@ -1,0 +1,314 @@
+Adversarial Machine LearningFranziska Boenisch and Adam DziedzicCourse on Trustworthy Machine Learning
+SprintML
+DogCat
+2
+Machine Learning: train time
+3
+Machine Learning: train time
+4
+Machine Learning: inference time
+5
+Machine Learning: inference time
+6
+Adversarial perturbations: test time
+100 X enlarged difference between original & adversarial images[BS14]
+7
+Adversarial perturbations: test time
+100 X enlarged difference between original & adversarial images[BS14]
+8
+Adversarial examples: broadest definition
+An input to an ML model that is intentionally designed by an attacker to fool the model into producing an incorrect output.
+100 X enlarged difference between original & adversarial images[GP17]
+9
+Adversarial examples: 𝜖-bounded
+𝑓𝑥∗≠𝑓𝑥‖𝑥∗−𝑥‖≤𝜀assumes: 𝑂𝑥∗=𝑂(𝑥)
+[TB20] 
+10
+11
+Threat model
+Bull mastiffTigercat
+𝒙
+ 𝒙’
+[PM17]
+Crafting white-box attacks
++𝜀∗=
+Bull mastiff
+𝜵𝒙𝑳(𝒙,𝒚,𝜽)
+Tigercat
+𝒙
+ 𝒙’12
+Evolution of 𝐿!based adversarial examplesFast Gradient Sign Method (FGSM)-generate adversarial   examples with a single gradient step.𝑥=𝑥+𝜀	sgn(∇!𝐿𝑥,𝑦,𝜃)[GS15]
+13
+Evolution of 𝐿!based adversarial examplesFast Gradient Sign Method (FGSM)-generate adversarial   examples with a single gradient step.𝑥=𝑥+𝜀	sgn(∇!𝐿𝑥,𝑦,𝜃)Random Start (R+FGSM): 𝑥=𝑥+𝑈𝑛𝑖𝑓𝑜𝑟𝑚(−𝜀,𝜀)
+[GS15]
+[TK18] 
+14
+Evolution of 𝐿!based adversarial examplesFast Gradient Sign Method (FGSM)-generate adversarial   examples with a single gradient step.𝑥=𝑥+𝜀	sgn(∇!𝐿𝑥,𝑦,𝜃)Random Start (R+FGSM): 𝑥=𝑥+𝑈𝑛𝑖𝑓𝑜𝑟𝑚(−𝜀,𝜀)Basic Iterative Method (BIM) - multiple smaller FGSM steps: 𝑥"#$=𝑃𝑟𝑜𝑗!#%(𝑥"+𝜀	𝑠𝑔𝑛∇!!𝐿𝑥",𝑦,𝜃)
+[GS15]
+[TK18] 
+[KGB17] 
+15
+Increasing the strength of the attacksFast Gradient Sign Method (FGSM)-generate adversarial   examples with a single gradient step.𝑥=𝑥+𝜀	sgn(∇!𝐿𝑥,𝑦,𝜃)Random Start (R+FGSM): 𝑥=𝑥+𝑈𝑛𝑖𝑓𝑜𝑟𝑚(−𝜀,𝜀)Basic Iterative Method (BIM) - multiple smaller FGSM steps: 𝑥"#$=𝑃𝑟𝑜𝑗!#%(𝑥"+𝜀	𝑠𝑔𝑛∇!!𝐿𝑥",𝑦,𝜃)Projected Gradient Descent (PGD) - multiple random restarts.
+[GS15]
+[TK18] 
+[KGB17] [MM18] 16
+PGD: Projected Gradient Descent
+𝒙(𝟎)
+[MM18] 
+17
+PGD: Projected Gradient Descent
+𝒙(𝟎)
+[MM18] 
+𝒙(𝟎)−∇𝑓(𝑥!)
+18
+PGD: Projected Gradient Descent
+𝒙(𝟎)
+[MM18] 
+19
+Crafting black-box attacks
++=
+Bull mastiffTigercat
+𝒙
+ 𝒙’
+ML model
+20
+Tr a n s f e r-based black-box attacks
++=
+Bull mastiffTigercat
+𝒙
+ 𝒙’
+ML model
+SurrogateModel
+[PM17] 
+21
+Tr a n s f e r-based black-box attacks
+𝒙
+ML model
+SurrogateModelAttackedModel
+[PM17] 
+22
+Tr a n s f e r-based black-box attacks
+𝒙
+ML model
+SurrogateModel AttackedModel𝜵𝒙𝑳(𝒙,𝒚,𝜽)
++
+[PM16, PM17] 
+23
+SimBA: Simple Black-box Attack
++𝜀
+−𝜀
+[GG19] 
+24
++𝜀
+−𝜀
+SimBA: Simple Black-box Attack
+Classifier
+Classifier𝑥*
+𝑥+
+𝑝,(𝑥*)
+𝑝,(𝑥+)
+[GG19] 
+25
++𝜀
+−𝜀
+SimBA: Simple Black-box Attack
+Classifier
+Classifier𝑥*
+𝑥+
+𝑝,(𝑥*)
+𝑝,(𝑥+)𝑥′←𝑎𝑟𝑔𝑚𝑖𝑛{𝑝,𝑥*,𝑝,𝑥+,𝑝,𝑥}
+[GG19] 
+26
+Efficient attack on Google Cloud Vision API
+SimBA: 70% success rate with max 5000 API calls (~$7.5)Other best attack: 25% success rate under the same budget
+[GG19] 
+27
+Adversarial examples in the physical world
+[KGB17] 
+28𝜀=8𝜀=4
+Synthesizing Robust Adversarial Examples[AE18] 
+29
+Audio adversarial examples[CW18, SE20 (over-the-air)]
+30
+§§§§
+Four main categories of defenses
+31
+§§§§
+Four main categories of defenses
+32
+§§§§
+Four main categories of defenses
+33
+§§§§
+Four main categories of defenses
+34
+§§§§
+Four main categories of defenses
+35
+Defendmodels via adversarial training (AT)1.Tr a d i t i o n a l  training: minimize the loss with respect to 𝜃min&𝛦!,(~*[𝐿𝑥,𝑦,𝜃]
+36
+Adversarial training on adversarial inputs1.Tr a d i t i o n a l  training: minimize the loss with respect to 𝜃min&𝛦!,(~*[𝐿𝑥,𝑦,𝜃]2.Adversarial example: maximize the loss using 𝑥 and 𝛿      𝑚𝑎𝑥+∈%𝐿𝑥+𝛿,𝑦,𝜃
+37
+Tr a i nrobust models: adversarial training1.Tr a d i t i o n a l  training: minimize the loss with respect to 𝜃min&𝛦!,(~*[𝐿𝑥,𝑦,𝜃]2.Adversarial example: maximize the loss using 𝑥 and 𝛿      𝑚𝑎𝑥+∈%𝐿𝑥+𝛿,𝑦,𝜃3.Adversarialtraining:min&𝛦!,(~*[𝑚𝑎𝑥+∈%𝐿𝑥+𝛿,𝑦,𝜃]
+38
+Robustness of Adversarially T rained models
+MNIST
+Strength of the PGD attack39
+[MM18] 
+MNIST
+CIFAR10
+Strength of the PGD attackStrength of the PGD attack
+Robustness of Adversarially T rained models[MM18] 
+40
+Adversarial T raining vs Other Defenses*Propose combining adversarial training ** Imperfect Projected Gradient Descent
+[PM17 (gradient masking), AC18 (obfuscated gradients)]
+41
+Adaptive attack with more accurate gradient 
+𝜕𝐿𝜕𝐹"#=𝑔𝑟𝑎𝑑_𝑛𝑜𝑖𝑠𝑒10
+n=10X
+[AE18] 
+42
+Natural vs Adversarial DecisionBoundaries
+1) Simple decision boundary 2) Adversarial examples within 𝐿$ balls
+3) Separating 𝐿$ balls requires complex boundary
+[MM18] 
+43
+Natural vs AdversarialDecision Boundaries
+1) Simple decision boundary 2) Adversarial examples within 𝐿$ balls3) Separating 𝐿$ balls requires complex boundary
+[MM18] 
+44
+Natural vs AdversarialDecision Boundaries
+Higher network capacity enablesmore robust classification
+1) Simple decision boundary 2) Adversarial examples within 𝐿$ balls3) Training on         requires a complex decision boundary
+[MM18] 
+45
+Diminishing returns for larger networks
+[GA21]
+46
+The closer to boundary the larger weight
+[GA21]
+47
+Deeper models can perform better[GQ20] 
+48
+Deeper models can perform better[GQ20] 
+49
+Smooth activations can boost robustness[GQ20] 
+50
+New architectures needed for Adv. T rainingDeep or wide ConvNets - tremendous number of parameters make the decision boundary complicated but inhibit the optimization.New network architectures catering to local smoothing via adversarial training are needed (e.g., Vision Transformer).
+[AI21,GA21]
+51
+§§
+Robust generalization requires more data
+[UB19, CR20] 
+[HL19][SS18]
+52
+§§
+Robust generalization requires more data
+Quantity of DataClean Accuracy (%)Robust Accuracy (%)200K90.9557.29500K90.6859.121M91.0058.89
+[GQ20] [UB19, CR20] 
+[HL19][SS18]
+53
+How to use the additional data?[GQ20] 
+54
+Channel-wise activation magnitude
+[IA21] 
+55
+Channel-wise activation frequency[IA21] 
+56
+Channel-wise activation suppressing (CAS)[IA21] 
+57
+§§§§§
+FREE adversarial training improves efficiency[SM19] 
+58
+Adversarial T raining: Standard vs FREE[SM19, MM18] 
+~7X faster but 4% lower robust accuracy59
+§§§§§Warm-start: perturbation 𝛿	generated on the previous mini-batch re-used to warm-start a new mini-batch.
+FREE adversarial training improves efficiency[SM19] 
+60
+Warm-start: perturbation 𝛿	generated on the previous mini-batch is used to warm-start a new mini-batch.
+From FREE to FAST Adversarial T raining
+starting from a non-zero random initial perturbation
+[SM19 (free), WR20 (fast)] 
+61
+§§§§
+§§ larger FGSM step size (10/255) random initialization §§
+FREE vs FAST adversarial training[WR20]
+62
+Early stopping in Adversarial T rainingwith FGSM
+Early stop![RW20]Model trained on CIFAR10
+63
+Standard & Robust Performance on CIFAR-10
+[WR20]
+64
+Robustness against multiple ℓCnorm attacks[TB19] c
+65
+§§§
+§
+Robustness against multiple ℓCnorm attacks[TB19,SB19]
+66
+§Robust adversarial training has a very high computational cost.§No theoretical model§ good outputs for every possible input§ not adaptive:§Adversary can switch to a black-box attack when a defense masks gradients.§Most defenses close some vulnerabilities but leave others open.
+Why is it hard to build a robust defense?[GP17]
+67
+Why do adversarial examples exist?Quirkshigh-dimensional input spacenon-robust features  
+Open problem
+[GS15,CH20] 
+68
+High accuracy on high frequency features[YG19] 
+69
+Robust & non-robust features[IS20] 
+EarsTailXYZ…
+Non-robust features Robust features 
+70
+Robust & non-robust features[IS20] 
+EarsTailXYZ…
+Non-robust features Robust features 
+71
+What causes adversarial examples?[RK19] 
+Caused by a small adversarial cone jutting into a correct decision region
+A - correct classB - incorrect class
+72
+[CR19,LA19,LC19] 
+Smooth decision regions
+Certified robustness via randomized smoothing
+73
+Adversarial examples
+𝜖-bounded invariance-based adversarial example𝑓𝑥∗=𝑓𝑥‖𝑥∗−𝑥‖≤𝜀𝑂𝑥∗≠𝑂𝑥,Ox∗≠⊥
+𝜖-bounded sensitivity-based adversarial example𝑓𝑥∗≠𝑓𝑥‖𝑥∗−𝑥‖≤𝜀assumes: 𝑂𝑥∗=𝑂(𝑥)
+[TB20] 
+74
+Adversarial Robustness for SSL: Purifier Net
+A Self-supervised Approach for Adversarial Robustness  https://arxiv.org/pdf/2006.04924 75
+Robust Contrastive Learning (RoCL)
+76
+https://arxiv.org/pdf/2006.07589 
+Instance-Wise Adversarial Examples in SSL
+77https://arxiv.org/pdf/2006.07589 
+Instance-Wise Adversarial Examples in SSL
+78Robust Contrastive Learning (RoCL) https://arxiv.org/pdf/2006.07589 
+Adversarial Learning Objective in SSL
+79Robust Contrastive Learning (RoCL) https://arxiv.org/pdf/2006.07589 
+Robust Contrastive Loss
+80Robust Contrastive Learning (RoCL) https://arxiv.org/pdf/2006.07589 
+𝑡𝑥%&'
+Robust Contrastive Loss
+81Robust Contrastive Learning (RoCL) https://arxiv.org/pdf/2006.07589 
+𝑡𝑥%&'
+Robust Contrastive Loss
+82Robust Contrastive Learning (RoCL) https://arxiv.org/pdf/2006.07589 
+𝑡𝑥%&'
+The adversarial training has to be done from scratch within the contrastive learning. 
+Decoupled Adversarial T raining for SSL
+83
+
+Decoupled Adversarial T raining (DeACL)
+84
+
+§§§
+§§
+Open problems
+85
+86
+Thank you!Franziska Boenisch and Adam Dziedzicboenisch@cispa.de, adam.dziedzic@cispa.de sprintml.com Course on Trustworthy Machine Learning
+BS14 Intriguing properties of neural networksGS15 Explaining and Harnessing Adversarial ExamplesHX15 Learning with a Strong AdversaryPM16 Tr a n sf e r a b i l i t y  i n  M a c h i n e  L e a r n i n g :  f ro m  P h e n o m e n a  t o  B l a c k-Box Attacks using Adversarial SamplesGP17 Is attacking machine learning easier than defending it?”KG17 Adversarial Machine Learning at ScaleKGB17 Adversarial examples in the physical worldPM17 Practical Black-Box Attacks against Machine LearningAC18 Obfuscated Gradients Give a False Sense of Security: Circumventing Defenses to Adversarial ExamplesAE18 Synthesizing Robust Adversarial ExamplesCW18Audio Adversarial Examples: T argeted Attacks on Speech-to-Te x tMM18 To w a r d s  d e e p  l e a r n i n g  m o d e l s  r e s i s t a n t  t o  a d v e r s a r i a l  a t t a c k sSS18 Adversarially Robust Generalization Requires More DataTK18 Ensemble Adversarial T raining: Attacks and DefensesCR19 Certified Adversarial Robustness via Randomized SmoothingCR19 Certified Adversarial Robustness via Randomized SmoothingGG19 Simple Black-box Adversarial Attacks87
+88
+HL19 Using Pre-Tr a i n i n g  C a n  I m p ro v e  M o d e l  R o b u st n e ss a n d  U n c e r t a i n t yLA19 Certified Robustness to Adversarial Examples with Differential PrivacyLC19 Certified Adversarial Robustness with Additive NoiseRK19 The Odds are Odd: A Statistical T est for Detecting Adversarial ExamplesSB19 To w a r d s  t h e  f i r s t  a d v e r s a r i a l l y  r o b u s t  n e u r a l  n e t w o r k  m o d e l  o n  M N I S TSM19 Adversarial training for free!TB19Adversarial Training and Robustness for Multiple PerturbationsUB19 Are Labels Required for Improving Adversarial Robustness?YG19 A Fourier Perspective on Model Robustness in Computer VisionCH20 Reliable evaluation of adversarial robustness with an ensemble of diverse parameter-free attacksCR20 Unlabeled Data Improves Adversarial RobustnessGQ20 Uncovering the Limits of Adversarial T raining against Norm-Bounded Adversarial ExamplesIS20 Adversarial Examples Are Not Bugs, They Are FeaturesRW20 Overfitting in adversarially robust deep learningSE20 Imperio: Robust Over-the-Air Adversarial Examples for Automatic Speech Recognition SystemsTB20 Fundamental T radeoffs between Invariance andSensitivity to Adversarial PerturbationsWR20 Fast is better than free: Revisiting adversarial trainingAI21An Image is Worth 16x16 Words: Transformers for Image Recognition at ScaleGA21Geometry-aware Instance-reweighted Adversarial TrainingIA21Improving Adversarial Robustness via Channel-wise Activation Suppressing

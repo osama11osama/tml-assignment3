@@ -1,0 +1,343 @@
+Adam Dziedzic & Franziska Boenisch 
+Nima Dindarsafa | 27.05.2026
+Model Stealing II & RobustnessTutorial Session 5 - Trustworthy Machine Learning
+1
+Self-Supervised Learning (Vision)
+2
+SimCLR SimSiam DINO
+Self-Supervised Learning (Vision)
+3
+SimCLR SimSiam DINO
+In all of methods two diﬀerent augmentations of the same image is 
+passed through the network. Two views of the same image build the 
+positive samples in contrastive learning-based methods. 
+Self-Supervised Learning (Vision)
+4
+SimCLR
+ is the representation and  is the base encoder 
+ 
+ is the projection head 
+ 
+A Contrastive Loss is used 
+ 
+The same network is used in both branches! Objective is to push positive 
+samples closer while pulling negative ones away.
+hi f(.)
+hi=f(˜xi)=ResNet(˜xi)
+g(.)
+zi=g(hi)=W(2)σ(W(1)hi)
+ℓi,j=−log
+exp(sim(zi,zj)/τ)
+∑2N
+k=11[k≠i]exp(sim(zi,zk)/τ)
+Self-Supervised Learning (Vision)
+5
+The same backbone encoder and projection structure as SimCLR 
+SimSiam has a prediction head -> Objective: Make one view predict the 
+other view’s representation. (No negative samples are used.) 
+The loss objective (sg = stop-grad): 
+ 
+ 
+The same network is used in both branches!
+ℒ=1
+2𝒟(p1,sg(z2))+1
+2𝒟(p2,sg(z1))
+𝒟(p,z)=−p
+∥p∥2
+⋅z
+∥z∥2
+SimSiam
+Self-Supervised Learning (Vision)
+6
+The objective in DINO is to train a student network that matches the output 
+distribution of a teacher network. 
+The DINO loss is a cross-entropy loss between the teacher output on one 
+view and the student output on another view: 
+ 
+ 
+The teacher model and the student models are separate models with 
+diﬀerent set of parameters! The teacher is updated by exponential moving 
+average of the student parameters.
+ℒDINO=H(pt(x1),ps(x2))+H(pt(x2),ps(x1))
+H(pt,ps)=−∑k
+p(k)
+t logp(k)
+s
+DINO
+
+Self-Supervised Learning (Vision)
+7
+SimSiam DINO
+Why stop gradient operation is used? 
+•To stop having two identical networks! 
+•In this case the model will only project all images into a single 
+representation known as representation collapse! 
+In this case how does SimCLR avoid representation collapse?
+Self-Supervised Learning (Language)
+8
+Input: 
+    A large corpus of unlabeled text D, A transformer encoder fθ, Masking probability p, for example p = 0.15 
+For each training step: 
+    1. Sample a batch of text sequences: 
+           x = [w1, w2, ..., wn] 
+    2. Randomly select some token positions to mask: 
+           M ⊂ {1, 2, ..., n} 
+    3. Create a corrupted input sequence x_masked: 
+           replace wi with [MASK] for all i ∈ M 
+    4. Feed the corrupted sequence into the encoder: 
+           h1, h2, ..., hn = fθ(x_masked) 
+    5. For each masked position i ∈ M: 
+           predict the original token wi from hi 
+    6. Compute the masked language modeling loss: 
+           L = - Σ_{i ∈ M} log Pθ(wi | x_masked) 
+    7. Update θ by minimizing L 
+Output: 
+    A trained encoder fθ that maps text into useful representations
+Attack Quality Measure
+9
+I(fs,fv)=H(fs∣D)+H(fv∣D)−H(fs,fv∣D) C(fs,fv)=1
+|D|∑d∈D
+fs(d)Tfv(d)
+∥fs(d)∥2∥fv(d)∥2
+Mutual Information Cosine Similarity
+Attack Quality Measure
+10
+I(fs,fv)=H(fs∣D)+H(fv∣D)−H(fs,fv∣D) C(fs,fv)=1
+|D|∑d∈D
+fs(d)Tfv(d)
+∥fs(d)∥2∥fv(d)∥2
+Mutual Information Cosine Similarity
+How much information the stolen encoder’s representation contains about the 
+target encoder’s representation. A higher value means the stolen encoder 
+preserves more of the structure or information present in the target model’s 
+outputs
+Attack Quality Measure
+11
+I(fs,fv)=H(fs∣D)+H(fv∣D)−H(fs,fv∣D) C(fs,fv)=1
+|D|∑d∈D
+fs(d)Tfv(d)
+∥fs(d)∥2∥fv(d)∥2
+Mutual Information Cosine Similarity
+How close the two representation vectors are in direction. A higher value means 
+the stolen encoder produces representations that are more geometrically 
+aligned with the target encoder’s representations.
+Attack Quality Measure
+12
+I(fs,fv)=H(fs∣D)+H(fv∣D)−H(fs,fv∣D) C(fs,fv)=1
+|D|∑d∈D
+fs(d)Tfv(d)
+∥fs(d)∥2∥fv(d)∥2
+Mutual Information Cosine Similarity
+Interpretation: If both mutual information and cosine similarity are 
+high, the stolen encoder is likely producing representations that 
+are both informationally similar and geometrically aligned with 
+the target encoder.
+Defenses Against Stealing - Obfuscation
+13
+Initial Vector Representation 
+Repr = [0.7, 0.2, 0.4, 0.1, 0.8] 
+Obfuscation 1: Shuﬄing  
+Repr_shuﬄe = [0.1, 0.2, 0.8, 0.7, 0.4] 
+Obfuscation 2: Adding Constant Value 
+ Repr_add = [0.7, 0.2, 0.4, 0.5, 0.1, 0.8] 
+Obfuscation 3: Linear Transformation 
+Repr_transform = [0.7 x 2, 0.2 x 2, 0.4 x 2, 0.1 x 2, 0.8 x 2] = [0.14, 0.4, 0.8, 0.2, 1.6] 
+Obfuscation 4: Any combination of the above options
+Defenses Against Stealing - Active Defense
+14
+How does Active Defense perform? 
+•The goal is to stop the attacker while querying the API. 
+•Instead of altering all representations, increase the cost for 
+suspicious users.
+Image Source: [1]
+[1] Bucks for Buckets (B4B): Active defenses against stealing encoders, Dubinsky et al.; https:/ /arxiv.org/abs/2310.08571
+Defenses Against Stealing - Active Defense
+15
+How do benign users and adversaries behave diﬀerently? 
+•A benign user usually has a speciﬁc downstream task, so their 
+inputs often come from a limited data distribution. 
+•Their queries occupy a small fraction of the representation 
+space. 
+•On the other hand, the adversary requires broad convergence 
+so they query many diverse inputs. 
+•Their queries occupy a large fraction of the representation 
+space.
+ Image Source: [1]
+[1] Bucks for Buckets (B4B): Active defenses against stealing encoders, Dubinsky et al.; https:/ /arxiv.org/abs/2310.08571
+Defenses Against Stealing - Active Defense
+16
+How can we use the diﬀerence in the coverage to increase the 
+cost for the adversary? 
+•For instance, [1] uses locality-sensitive hashing to assign 
+representations to buckets. 
+•If a user query requires broader coverage of the 
+representation space then increase the cost.
+Image Source: [1]
+[1] Bucks for Buckets (B4B): Active defenses against stealing encoders, Dubinsky et al.; https:/ /arxiv.org/abs/2310.08571
+Defenses Against Stealing - Active Defense
+17
+Why is Active Defense preferable to direct obfuscation of the 
+output space? 
+•This method keeps the representation intact. 
+•So, the benign utility is preserved. 
+•On the other hand only the cost for adversaries is increased.
+Image Source: [1]
+[1] Bucks for Buckets (B4B): Active defenses against stealing encoders, Dubinsky et al.; https:/ /arxiv.org/abs/2310.08571
+Adversarial Examples - Gradient Optimization 
+18
+Stochastic Gradient Descent (SGD) 
+ 
+Adversarial Example 
+θt+1=θt−η∇θL
+xt+1=xt+ϵ∇xL
+Adversarial Examples - Gradient Optimization 
+19
+Stochastic Gradient Descent (SGD) 
+ 
+•SGD updates the model parameters in the direction that is expected to decrease the 
+loss, using the gradient estimated from a mini-batch of training examples.
+θt+1=θt−η∇θL
+Adversarial Examples - Gradient Optimization 
+20
+Adversarial Example 
+ 
+•Adversarial example updates the input data in the direction that is expected to increase 
+the loss. The update value should be as small as possible to avoid large perturbations that 
+are easily detectable. 
+Why do we want to increase the loss?
+xt+1=xt+ϵ∇xL
+Adversarial Examples - FGSM
+21
+Fast Gradient Sign Method (FGSM) 
+ 
+Why do we use sign of the gradient in FGSM? 
+•This is designed for an - bounded attack.  
+•Using the raw gradient instead would make the perturbation depend on the scale of the 
+gradient values. Some pixels might change too much, others too little, and the 
+perturbation may not use the  budget eﬃciently.  
+•The sign keeps only the direction: increase or decrease each pixel by the maximum 
+allowed amount.
+xt+1=xt+ϵsign(∇xL)
+L∞
+L∞
+Adversarial Examples -  normL∞
+22
+ norm 
+ 
+Suppose we have perturbation vector of  
+which represents the magnitude of perturbations applied 
+to each pixel of a 2-dimensional image. 
+An  bounded perturbation follows:  
+ 
+Interpretation: Each coordinate can be changed by at 
+most , independently!
+L∞
+∥x∥∞=limp→∞(
+n
+∑i=1
+|xi|p
+)
+1
+p
+=maxi
+|xi|
+δ=(δ1,δ2)
+L∞
+∥δ∥∞=max(|δ1|,|δ2|)≤ϵ
+ϵ
+Unit balls of diﬀerent  norms in 
+a 2-dimensional space
+Lp
+Adversarial Examples - Adversarial Training
+23
+Adversarial Training - MinMax Optimization  
+ 
+•Inner Maximization: Finds an adversarial perturbation  within the allowed perturbation 
+set. 
+•Outer Minimization: Updates the model parameters  so that the model performs well on 
+the worst case perturbed inputs. 
+minθ
+𝔼(x,y)∼D[maxδ∈S
+ℒ(x+δ,y,θ)]
+δ
+θ
+Adversarial Examples - Adversarial Training
+24
+Adversarial Training - MinMax Optimization  
+ 
+Why does this process improve the model’s robustness? 
+•The model is no longer trained to only to classify clean examples correctly. 
+•This encourages the decision boundary to move away from the data points and makes 
+the model less sensitive to small adversarial perturbations.
+minθ
+𝔼(x,y)∼D[maxδ∈S
+ℒ(x+δ,y,θ)]
+Adversarial Examples - Adversarial Training
+25
+Adversarial Training - Side Eﬀects  
+•Higher Cost— Since adversarial examples are generated during training. 
+•Accuracy trade-oﬀ— The model might achieve a better robust accuracy but with often 
+worse clean accuracy.
+Adversarial Examples - Adversarial Training
+26
+True or False?  
+•Adversarial training requires more capacity than standard training 
+•True; the model must correctly classify not only the natural training examples, but also 
+many adversarially perturbed versions around them. This requires a more complex 
+decision boundary.  
+•Simply increasing the capacity has diminishing returns 
+•True; because robustness also depends on the architecture, optimization, data, and 
+training procedure not just on the number of parameters.
+Adversarial Examples - Adversarial Training
+27
+Image Source: [2]
+[2] Geometry-Aware Instance-Reweighted Adversarial training, Zhang et al.; https:/ / openreview.net/pdf?id=iAX0l6Cz8ub 
+Adversarial Examples - Activation Pattern
+28
+Image Source: [3]
+[3] Improving adversarial robustness via channel-wise activation suppressing, Bai et al.; https:/ / openreview.net/forum?id=zQTezqCCtNx
+Adversarial Examples - Activation Pattern
+29
+Image Source: [3]
+[3] Improving adversarial robustness via channel-wise activation suppressing, Bai et al.; https:/ / openreview.net/forum?id=zQTezqCCtNx
+Natural examples strongly 
+activate a subset of channels, 
+especially the high-frequency 
+channels on the left side of the 
+plot.
+Adversarial Examples - Activation Pattern
+30
+Image Source: [3]
+[3] Improving adversarial robustness via channel-wise activation suppressing, Bai et al.; https:/ / openreview.net/forum?id=zQTezqCCtNx
+Adversarial examples activate 
+channels more uniformly across 
+the whole layer, including many 
+channels on the right side that 
+are rarely activated by natural 
+examples.
+Adversarial Examples - Activation Pattern
+31
+Image Source: [3]
+[3] Improving adversarial robustness via channel-wise activation suppressing, Bai et al.; https:/ / openreview.net/forum?id=zQTezqCCtNx
+Adversarial training makes the 
+activation patterns of natural 
+and adversarial examples much 
+more similar. However, this 
+similarity is not perfect; some 
+low-frequency channels are still 
+activated by adversarial 
+examples.
+Adversarial Examples - Activation Pattern
+32
+Image Source: [3]
+[3] Improving adversarial robustness via channel-wise activation suppressing, Bai et al.; https:/ / openreview.net/forum?id=zQTezqCCtNx
+Conclusion 
+•Adversarial training improves robustness by making 
+the model’s internal representations more stable 
+under adversarial perturbations. 
+•Instead of allowing adversarial examples to activate 
+many irrelevant or non-robust channels, adversarial 
+training encourages the model to rely on more 
+consistent, class-relevant channels.
+Questions?
+33
