@@ -1,0 +1,26 @@
+# Saarland HPC (conduit2) — FGSM-AT Step 2 GPU job via Docker universe.
+#
+# Before submit:
+#   1. Replace YOUR_CLUSTER_USER below (or: sed -i 's/YOUR_CLUSTER_USER/youruser/' train_fgsm_at.sub)
+#   2. bash scripts/cluster/verify_setup.sh
+#   3. condor_submit scripts/cluster/condor/train_fgsm_at.sub
+#
+# If job hits walltime: edit sub file to add --resume to run script, resubmit.
+
+universe = docker
+docker_image = pytorch/pytorch:2.3.1-cuda12.1-cudnn8-devel
+executable = /bin/bash
+arguments = /home/YOUR_CLUSTER_USER/tml26_task3/scripts/cluster/run_fgsm_at.sh
+output = /home/YOUR_CLUSTER_USER/tml26_task3/runlogs/fgsm_at.$(ClusterId).out
+error = /home/YOUR_CLUSTER_USER/tml26_task3/runlogs/fgsm_at.$(ClusterId).err
+log = /home/YOUR_CLUSTER_USER/tml26_task3/runlogs/fgsm_at.log
+should_transfer_files = YES
+request_GPUs = 1
+request_CPUs = 4
+request_memory = 24G
+request_disk = 20G
++MaxRuntime = 86400
+requirements = UidDomain == "cs.uni-saarland.de"
++WantGPUHomeMounted = true
++WantScratchMounted = true
+queue 1

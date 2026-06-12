@@ -1,0 +1,20 @@
+# PGD-10 variant — chunk 2/4 to epoch 40.
+
+universe = docker
+docker_image = pytorch/pytorch:2.3.1-cuda12.1-cudnn8-devel
+executable = /bin/bash
+arguments = /home/YOUR_CLUSTER_USER/tml26_task3/scripts/cluster/run_pgd_at_chunk.sh 40
+output = /home/YOUR_CLUSTER_USER/tml26_task3/runlogs/pgd_s10_chunk40.$(ClusterId).out
+error = /home/YOUR_CLUSTER_USER/tml26_task3/runlogs/pgd_s10_chunk40.$(ClusterId).err
+log = /home/YOUR_CLUSTER_USER/tml26_task3/runlogs/pgd_s10_chunk40.log
+should_transfer_files = YES
+request_GPUs = 1
+request_CPUs = 4
+request_memory = 24G
+request_disk = 20G
++MaxRuntime = 3600
+environment = "TML3_TAG=pgd_at_s10 TML3_PGD_TRAIN_STEPS=10 TML3_BATCH=256 TML3_NUM_WORKERS=4 TML3_ROBUST_EVERY=0 TML3_SAVE_EVERY=3"
+requirements = UidDomain == "cs.uni-saarland.de"
++WantGPUHomeMounted = true
++WantScratchMounted = true
+queue 1

@@ -1,0 +1,20 @@
+# Resume FGSM-AT after interruption (same as train_fgsm_at.sub but passes --resume).
+# Replace YOUR_CLUSTER_USER before submit.
+
+universe = docker
+docker_image = pytorch/pytorch:2.3.1-cuda12.1-cudnn8-devel
+executable = /bin/bash
+arguments = /home/YOUR_CLUSTER_USER/tml26_task3/scripts/cluster/run_fgsm_at.sh --resume
+output = /home/YOUR_CLUSTER_USER/tml26_task3/runlogs/fgsm_at_resume.$(ClusterId).out
+error = /home/YOUR_CLUSTER_USER/tml26_task3/runlogs/fgsm_at_resume.$(ClusterId).err
+log = /home/YOUR_CLUSTER_USER/tml26_task3/runlogs/fgsm_at_resume.log
+should_transfer_files = YES
+request_GPUs = 1
+request_CPUs = 4
+request_memory = 24G
+request_disk = 20G
++MaxRuntime = 86400
+requirements = UidDomain == "cs.uni-saarland.de"
++WantGPUHomeMounted = true
++WantScratchMounted = true
+queue 1

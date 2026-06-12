@@ -6,6 +6,8 @@ This folder is **local only** (gitignored). It holds learning notes, plans, and 
 
 | Path | Purpose |
 |------|---------|
+| `tools/tml_submit_gui.py` | **Submit GUI** — upload `.pt`, history, queue, leaderboard |
+| `tools/launch_submit_gui.ps1` | Double-click launcher for the GUI |
 | `AI cach/README.md` | Documentation index — **start here** |
 | `AI cach/assignment3_master_guide.ipynb` | Zero-to-hero workshop notebook |
 | `AI cach/00_project_scan.md` | What exists / what's missing |

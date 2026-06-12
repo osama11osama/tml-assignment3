@@ -1,7 +1,7 @@
 # Project scan — Assignment 3 (Robustness)
 
 > Scan date: 2026-06-07  
-> Status: **documentation phase only — no implementation started**
+> Status: **Stage 0 complete | Stage 1 incomplete (3/100 epochs)**
 
 ---
 
@@ -109,8 +109,11 @@ Assignment3/
 |------|--------|
 | Read assignment PDF + Tutorial 6 | ✅ extracted to `pdf_extracts/` |
 | Read lecture 05 (Robustness) | ✅ study notes exist in course hub |
-| Download HF starter files | ⏳ not done |
-| Local baseline (standard training) | ⏳ not started |
+| Download HF starter files | ✅ `data/train.npz` |
+| verify_setup + task_template | ✅ passed |
+| train_standard.py + resume | ✅ tested (exp002) |
+| ERM 100-epoch full run | ⏳ **not done — completes Step 1** |
+| exp001 best clean 55.34% | ✅ logged in docs/STEP1_ERM_RESULTS.md |
 | Local adversarial training | ⏳ not started |
 | Local robust eval (PGD) | ⏳ not started |
 | First leaderboard submission | ⏳ not started |

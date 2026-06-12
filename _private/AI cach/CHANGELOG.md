@@ -14,10 +14,36 @@
 - `_private/AI cach/_build_master_guide.py` — notebook generator
 - `TML_Summury/.../assignment-03-robustness/` — full doc set (8 files)
 
-**Not done (by design):**
-- No code implementation
-- No HuggingFace download
-- No training or submission
+## Session 2 — 2026-06-11
+
+**Step 0 implementation:**
+- Downloaded `train.npz`, `src/`, `scripts/`, verify pipeline
+- CUDA PyTorch on RTX 5060
+
+**Submit GUI (Assignment 2 pattern):**
+- `_private/tools/tml_submit_gui.py` — Task 3 model upload GUI
+- `_private/tools/launch_submit_gui.ps1`
+- Config/history: `%APPDATA%\tml_submit_gui\task3\`
+
+## Session 3 — 2026-06-11
+
+**Documented Step 1 results:**
+- `docs/STEP1_ERM_RESULTS.md` — full experiment log
+- `experiments/exp_notes.md` — summary table
+- Updated README + TML experiment-summary
+
+**Step 1 verdict:** NOT complete (only 2–3 epoch tests; 100-epoch run pending)
+
+**Recorded results:**
+- exp001: clean 55.34%, robust 3.16%, unified 0.293 (2 epochs)
+- exp002: clean 40.86%, robust 6.22%, unified 0.235 (3 epochs, resume test)
+
+**GPU:** RTX 5060 + cuda confirmed; no full training running at doc time
+
+**Not done yet:**
+- ERM 100 epochs (exp003)
+- FGSM / PGD adversarial training
+- Leaderboard submission
 
 **Sources used:**
 - `Assignment_3_-_Robustness.pdf`

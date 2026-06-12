@@ -1,0 +1,14 @@
+# Step 1 — ERM baseline (reference config)
+architecture: resnet18
+epochs: 100
+batch_size: 256
+lr: 0.1
+momentum: 0.9
+weight_decay: 0.0005
+milestones: [50, 75]
+gamma: 0.1
+val_fraction: 0.1
+pgd_eps: 0.031372549  # 8/255
+pgd_steps: 20
+robust_every: 25
+output: results/checkpoints/baseline_erm_resnet18.pt

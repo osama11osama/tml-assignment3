@@ -1,0 +1,11 @@
+# PGD-AT chain — 4×1h GPU jobs run back-to-back automatically (1 GPU at a time).
+# Submit from repo root: bash scripts/cluster/submit_pgd_chain.sh
+
+JOB chunk20 train_pgd_at_chunk20.sub
+JOB chunk40 train_pgd_at_chunk40.sub
+JOB chunk60 train_pgd_at_chunk60.sub
+JOB chunk80 train_pgd_at_chunk80.sub
+
+PARENT chunk20 CHILD chunk40
+PARENT chunk40 CHILD chunk60
+PARENT chunk60 CHILD chunk80

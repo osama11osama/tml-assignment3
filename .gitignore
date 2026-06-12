@@ -16,6 +16,9 @@ __pycache__/
 .mypy_cache/
 .ipynb_checkpoints/
 
+# Course PDFs (keep locally; cite paths in report)
+*.pdf
+
 # Large data and model weights (download from HuggingFace locally)
 data/
 *.npz
@@ -33,6 +36,7 @@ Thumbs.db
 
 # Training outputs (keep structure via .gitkeep when added)
 results/checkpoints/
+results/runs/
 results/logs/*.log
 
 # Report build artifacts (keep LaTeX sources)

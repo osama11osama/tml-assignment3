@@ -1,0 +1,18 @@
+# Step 2 — FGSM adversarial training (reference config)
+architecture: resnet18
+epochs: 50
+batch_size: 128
+lr: 0.01
+momentum: 0.9
+weight_decay: 0.0005
+milestones: [30, 40]
+gamma: 0.1
+val_fraction: 0.1
+fgsm_eps: 0.031372549  # 8/255
+pgd_eps: 0.031372549
+pgd_steps: 20
+robust_every: 10
+num_workers: 2
+save_every: 5
+init: results/checkpoints/baseline_erm_resnet18.pt
+output: results/checkpoints/fgsm_at_resnet18.pt
