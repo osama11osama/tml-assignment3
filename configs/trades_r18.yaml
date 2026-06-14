@@ -1,0 +1,20 @@
+# Week 1 Track B — TRADES fine-tune from PGD-AT R18
+architecture: resnet18
+epochs: 40
+batch_size: 128
+lr: 0.005
+momentum: 0.9
+weight_decay: 0.0005
+milestones: [25, 35]
+gamma: 0.1
+pgd_eps: 0.031372549
+pgd_alpha: 0.007843137
+pgd_train_steps: 10
+pgd_eval_steps: 20
+trades_beta: 6.0
+robust_every: 10
+num_workers: 2
+save_every: 5
+tag: trades_r18
+init: results/checkpoints/pgd_at_resnet18.pt
+output: results/checkpoints/trades_r18_resnet18.pt

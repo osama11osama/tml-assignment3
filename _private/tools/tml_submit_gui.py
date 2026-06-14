@@ -7,7 +7,10 @@ Adapted from Assignment 2 Stolen Model Detection GUI (same server, shared API ke
   - Lists .pt checkpoints from results/checkpoints (configurable scan folder)
   - Validate state_dict + architecture, then upload with model_name field
   - Leaderboard tab: Robustness (03_robustness)
-  - Shows clean / robust / unified % (from progress.json, local eval, or server response)
+  - Shows clean / robust / unified (decimal) with Δ vs team LB reference
+  - Color-coded checkpoint list (best-first) and history (LB before → after, change arrows)
+  - Auto-detects architecture per checkpoint (meta / filename / history / state_dict probe)
+  - Queue stores verified architecture per model; auto-submit uses queue Arch, not the dropdown
   - Distinguishes HTTP 200 upload vs evaluation passed/failed; smart cooldown (60m scored / 2m rejected)
   - "Reset cooldown (local)" clears GUI timer only
   - History + queue + top-3 track under %APPDATA%\\tml_submit_gui\\task3\\
@@ -210,12 +213,25 @@ def load_submit_queue() -> list[dict[str, Any]]:
         model_path = str(item.get("model_path", "")).strip()
         if not model_path:
             continue
+        path = Path(model_path)
+        resolved = (
+            resolve_checkpoint_architecture(path)
+            if path.is_file()
+            else {
+                "architecture": str(item.get("model_name") or DEFAULT_MODEL_NAME),
+                "source": str(item.get("arch_source") or "stored"),
+                "validated": bool(item.get("arch_validated", False)),
+            }
+        )
+        arch = str(resolved.get("architecture") or item.get("model_name") or DEFAULT_MODEL_NAME)
         out.append(
             {
                 "queue_id": str(item.get("queue_id") or uuid.uuid4()),
                 "model_path": model_path,
-                "model_basename": str(item.get("model_basename") or Path(model_path).name),
-                "model_name": str(item.get("model_name") or DEFAULT_MODEL_NAME),
+                "model_basename": str(item.get("model_basename") or path.name),
+                "model_name": arch,
+                "arch_source": str(resolved.get("source") or item.get("arch_source") or "stored"),
+                "arch_validated": bool(resolved.get("validated", item.get("arch_validated", False))),
                 "added_ts_utc": str(item.get("added_ts_utc") or utc_now()),
                 "attempts": max(0, int(item.get("attempts", 0) or 0)),
                 "last_event": str(item.get("last_event") or "Queued"),
@@ -267,6 +283,239 @@ def fmt_pct(v: Any, *, na: str = "—") -> str:
         return f"{x:.4f}"
     except (TypeError, ValueError):
         return na
+
+
+def parse_lb_float(v: Any) -> float | None:
+    if v is None:
+        return None
+    if isinstance(v, str) and v.strip().lower() in ("", "unknown", "none", "—"):
+        return None
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def fmt_unified_decimal(v: Any, *, na: str = "—") -> str:
+    x = parse_lb_float(v)
+    if x is None:
+        return na
+    if x > 1.0:
+        x = x / 100.0
+    return f"{x:.4f}"
+
+
+def lb_delta_text(local_unified: Any, reference_lb: float | None) -> str:
+    u = parse_lb_float(local_unified)
+    if u is None or reference_lb is None:
+        return "—"
+    if u > 1.0:
+        u = u / 100.0
+    d = u - reference_lb
+    if abs(d) <= LB_SCORE_EPS:
+        return "→ 0"
+    if d > 0:
+        return f"↑ +{d:.4f}"
+    return f"↓ {d:.4f}"
+
+
+def format_history_lb_change(before: Any, after: Any) -> str:
+    b, a = parse_lb_float(before), parse_lb_float(after)
+    if b is None or a is None:
+        return "—"
+    d = a - b
+    if abs(d) <= LB_SCORE_EPS:
+        return "→ same"
+    if d > 0:
+        return f"↑ +{d:.4f}"
+    return f"↓ {d:.4f}"
+
+
+def reference_lb_from_history(max_rows: int = 400) -> float | None:
+    best: float | None = None
+    for row in load_history_rows(max_rows):
+        for key in ("leaderboard_score_after", "unified_score"):
+            v = parse_lb_float(row.get(key))
+            if v is not None and (best is None or v > best):
+                best = v
+    return best
+
+
+def infer_architecture_from_filename(name: str) -> str | None:
+    low = name.lower()
+    for arch in ("resnet50", "resnet34", "resnet18"):
+        if arch in low:
+            return arch
+    shorthand = (
+        (re.compile(r"(?:^|[_\-])r50(?:[_\-.]|$)"), "resnet50"),
+        (re.compile(r"(?:^|[_\-])r34(?:[_\-.]|$)"), "resnet34"),
+        (re.compile(r"(?:^|[_\-])r18(?:[_\-.]|$)"), "resnet18"),
+    )
+    for pattern, arch in shorthand:
+        if pattern.search(low):
+            return arch
+    if "baseline_erm_r34" in low or re.search(r"(?:^|[_\-])erm_r34(?:[_\-.]|$)", low):
+        return "resnet34"
+    if re.search(r"(?:^|[_\-])erm_r18(?:[_\-.]|$)", low):
+        return "resnet18"
+    return None
+
+
+def load_checkpoint_meta(path: Path) -> dict[str, Any]:
+    meta_path = path.with_suffix(".meta.json")
+    if not meta_path.is_file():
+        return {}
+    try:
+        raw = json.loads(meta_path.read_text(encoding="utf-8-sig"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _arch_cache_path() -> Path:
+    return _config_dir() / "architecture_cache.json"
+
+
+def load_architecture_cache() -> dict[str, dict[str, Any]]:
+    p = _arch_cache_path()
+    if not p.is_file():
+        return {}
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def save_architecture_cache(cache: dict[str, dict[str, Any]]) -> None:
+    _arch_cache_path().write_text(json.dumps(cache, indent=2), encoding="utf-8")
+
+
+def _checkpoint_fingerprint(path: Path) -> str:
+    try:
+        st = path.stat()
+        return f"{st.st_size}:{int(st.st_mtime)}"
+    except OSError:
+        return path.name
+
+
+def detect_architecture_from_state_dict(path: Path) -> str | None:
+    try:
+        state = torch.load(path, map_location="cpu", weights_only=True)
+    except TypeError:
+        state = torch.load(path, map_location="cpu")
+    if not isinstance(state, dict):
+        return None
+    for arch in ALLOWED_ARCHITECTURES:
+        try:
+            model = make_model(arch)
+            model.load_state_dict(state, strict=True)
+            return arch
+        except Exception:
+            continue
+    return None
+
+
+def resolve_checkpoint_architecture(
+    path: Path | str,
+    *,
+    history_model_name: str | None = None,
+    progress_architecture: str | None = None,
+    cache: dict[str, dict[str, Any]] | None = None,
+    use_cache: bool = True,
+    probe_state_dict: bool = True,
+) -> dict[str, Any]:
+    """Return architecture + source for a checkpoint. State-dict probe is authoritative."""
+    p = Path(path).resolve()
+    cache = cache if cache is not None else load_architecture_cache()
+    fp = _checkpoint_fingerprint(p)
+    cache_key = _normalize_path_str(p)
+    if use_cache and cache_key in cache and cache[cache_key].get("fingerprint") == fp:
+        cached = dict(cache[cache_key])
+        cached["from_cache"] = True
+        return cached
+
+    filename_guess = infer_architecture_from_filename(p.name)
+    meta = load_checkpoint_meta(p)
+    meta_arch = str(meta.get("architecture", "")).strip()
+    hints: list[tuple[str, str]] = []
+    if meta_arch in ALLOWED_ARCHITECTURES:
+        hints.append(("meta", meta_arch))
+    if history_model_name in ALLOWED_ARCHITECTURES:
+        hints.append(("history", history_model_name))
+    if progress_architecture in ALLOWED_ARCHITECTURES:
+        hints.append(("progress", progress_architecture))
+    if filename_guess:
+        hints.append(("filename", filename_guess))
+
+    detected: str | None = None
+    if probe_state_dict and p.is_file():
+        detected = detect_architecture_from_state_dict(p)
+
+    if detected:
+        source = "state_dict"
+        mismatch = next((f"{src}:{arch}" for src, arch in hints if arch != detected), "")
+        result: dict[str, Any] = {
+            "architecture": detected,
+            "source": source,
+            "validated": True,
+            "filename_guess": filename_guess,
+            "fingerprint": fp,
+            "from_cache": False,
+        }
+        if mismatch:
+            result["hint_mismatch"] = mismatch
+        cache[cache_key] = {k: v for k, v in result.items() if k != "from_cache"}
+        save_architecture_cache(cache)
+        return result
+
+    for src, arch in hints:
+        result = {
+            "architecture": arch,
+            "source": src,
+            "validated": False,
+            "filename_guess": filename_guess,
+            "fingerprint": fp,
+            "from_cache": False,
+        }
+        cache[cache_key] = {k: v for k, v in result.items() if k != "from_cache"}
+        save_architecture_cache(cache)
+        return result
+
+    result = {
+        "architecture": DEFAULT_MODEL_NAME,
+        "source": "default",
+        "validated": False,
+        "filename_guess": filename_guess,
+        "fingerprint": fp,
+        "from_cache": False,
+    }
+    cache[cache_key] = {k: v for k, v in result.items() if k != "from_cache"}
+    save_architecture_cache(cache)
+    return result
+
+
+def architecture_label(resolved: dict[str, Any]) -> str:
+    arch = str(resolved.get("architecture", DEFAULT_MODEL_NAME))
+    src = str(resolved.get("source", ""))
+    if resolved.get("validated"):
+        return arch
+    if src and src != "default":
+        return f"{arch}?"
+    return f"{arch}?"
+
+
+def architecture_source_short(resolved: dict[str, Any]) -> str:
+    src = str(resolved.get("source", ""))
+    mapping = {
+        "state_dict": "verified",
+        "meta": "meta",
+        "history": "history",
+        "progress": "progress",
+        "filename": "name",
+        "default": "guess",
+    }
+    return mapping.get(src, src or "—")
 
 
 def _extract_metric(body: dict[str, Any], keys: tuple[str, ...]) -> float | None:
@@ -385,6 +634,11 @@ def discover_progress_metrics() -> dict[str, dict[str, Any]]:
             "epochs": data.get("epochs_completed"),
             "source": f"progress:{prog.parent.name}",
         }
+        arch_guess = infer_architecture_from_filename(prog.parent.name)
+        if arch_guess:
+            metrics["architecture"] = arch_guess
+        if str(data.get("architecture", "")).strip() in ALLOWED_ARCHITECTURES:
+            metrics["architecture"] = str(data["architecture"]).strip()
         for key in ("submit_copy", "best_checkpoint", "resume_checkpoint"):
             raw_path = str(data.get(key, "")).strip()
             if raw_path:
@@ -409,7 +663,12 @@ def lookup_checkpoint_metrics(
     return {}
 
 
-def metrics_summary_text(metrics: dict[str, Any], submit_state: dict[str, Any] | None = None) -> str:
+def metrics_summary_text(
+    metrics: dict[str, Any],
+    submit_state: dict[str, Any] | None = None,
+    *,
+    reference_lb: float | None = None,
+) -> str:
     if not metrics and not submit_state:
         return "Metrics: unknown — run Local eval or check training progress.json"
     parts: list[str] = []
@@ -417,9 +676,10 @@ def metrics_summary_text(metrics: dict[str, Any], submit_state: dict[str, Any] |
         src = str(metrics.get("source", "unknown"))
         clean = fmt_pct(metrics.get("clean_acc"))
         robust = fmt_pct(metrics.get("robust_acc"))
-        local_uni = fmt_pct(metrics.get("unified_score"))
+        local_uni = fmt_unified_decimal(metrics.get("unified_score"))
         quick = " (quick robust)" if metrics.get("quick_robust") else ""
-        parts.append(f"Local val ({src}{quick}): clean {clean} | robust {robust} | est. {local_uni}")
+        delta = lb_delta_text(metrics.get("unified_score"), reference_lb)
+        parts.append(f"Est. unified {local_uni} ({delta} vs team LB) | clean {clean} | robust {robust}{quick}")
         clean_v = metrics.get("clean_acc")
         if isinstance(clean_v, (int, float)):
             parts.append("GATE OK" if float(clean_v) > MIN_CLEAN_ACC else "GATE FAIL (<50% clean)")
@@ -427,9 +687,11 @@ def metrics_summary_text(metrics: dict[str, Any], submit_state: dict[str, Any] |
         last = str(submit_state.get("last_eval_status", "")).strip().lower()
         lb = submit_state.get("last_lb_score", submit_state.get("last_unified_score"))
         if last == "passed" and lb is not None:
-            parts.append(f"Server LB score: {_fmt_lb(lb)} (rank check: Update leaderboard)")
+            parts.append(f"Server LB: {_fmt_lb(lb)}")
         elif last == "failed":
             parts.append(f"Last submit: rejected — {str(submit_state.get('last_message', ''))[:120]}")
+        elif int(submit_state.get("attempts", 0)) == 0:
+            parts.append("Not submitted yet")
     return " | ".join(parts) if parts else "Metrics: —"
 
 
@@ -506,6 +768,9 @@ def build_submit_history_index(max_rows: int = 4000) -> tuple[dict[str, dict[str
                 state[f"last_{k}"] = ev[k]
         if ev.get("message"):
             state["last_message"] = ev["message"]
+        mn = str(row.get("model_name", "")).strip()
+        if mn in ALLOWED_ARCHITECTURES:
+            state["last_model_name"] = mn
         body = row.get("response")
         if isinstance(body, dict):
             sid = str(body.get("submission_id", body.get("id", row.get("server_submission_id", ""))))
@@ -782,8 +1047,8 @@ class App(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("TML Assignment 3 — Adversarial Robustness")
-        self.geometry("1220x940")
-        self.minsize(1000, 760)
+        self.geometry("1280x980")
+        self.minsize(1100, 800)
         self._settings = load_settings()
         self._cooldown_200_until = float(cooldown_until_from_history(200))
         self._rate_limit_until = float(cooldown_until_from_history(429))
@@ -798,41 +1063,65 @@ class App(tk.Tk):
         self._hist_row_meta: dict[str, dict[str, Any]] = {}
         self._extra_paths: set[str] = set()
         self._local_eval_in_flight = False
+        self._batch_eval_in_flight = False
         self._progress_metrics = discover_progress_metrics()
         self._local_metrics_cache = load_local_metrics_cache()
+        self._arch_cache = load_architecture_cache()
+        self._team_lb_ref = reference_lb_from_history() or 0.575571
         self.auto_queue_var = tk.BooleanVar(value=bool(self._settings.get("auto_submit_queue", False)))
         self.model_name_var = tk.StringVar(value=str(self._settings.get("default_model_name", DEFAULT_MODEL_NAME)))
+        self._setup_theme()
 
         hdr = ttk.Frame(self, padding=(12, 10, 12, 4))
         hdr.pack(fill=tk.X)
-        ttk.Label(hdr, text="Trustworthy ML — Assignment 3: Adversarial Robustness", font=("Segoe UI", 12, "bold")).pack(
-            anchor=tk.W
-        )
+        ttk.Label(
+            hdr,
+            text="Trustworthy ML — Assignment 3: Adversarial Robustness",
+            style="Header.TLabel",
+        ).pack(anchor=tk.W)
+        self.stats_var = tk.StringVar()
+        self._update_stats_bar()
+        ttk.Label(hdr, textvariable=self.stats_var, style="Stats.TLabel", wraplength=1200).pack(anchor=tk.W, pady=(4, 0))
         task_fr = ttk.LabelFrame(hdr, text="Task rules (read before submit)", padding=6)
         task_fr.pack(fill=tk.X, pady=(6, 0))
         for line in TASK_INFO_LINES:
             ttk.Label(task_fr, text=f"• {line}", wraplength=1120, justify=tk.LEFT).pack(anchor=tk.W)
 
-        pick_fr = ttk.LabelFrame(self, text="Checkpoints (.pt)", padding=8)
+        pick_fr = ttk.LabelFrame(self, text="Checkpoints (.pt) — sorted by est. unified (best first)", padding=8)
         pick_fr.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
-        cols = ("file", "clean", "robust", "server_lb", "status", "scored_n", "size_mb", "modified")
-        self.file_tree = ttk.Treeview(pick_fr, columns=cols, show="headings", height=9)
+        cols = ("file", "arch", "est_uni", "delta_lb", "clean", "robust", "server_lb", "status", "scored_n", "size_mb", "modified")
+        self.file_tree = ttk.Treeview(pick_fr, columns=cols, show="headings", height=10)
         for c, t, w in [
-            ("file", "File", 210),
-            ("clean", "Local clean", 82),
-            ("robust", "Local robust", 86),
-            ("server_lb", "Server LB", 78),
-            ("status", "Status", 88),
-            ("scored_n", "Scored #", 68),
-            ("size_mb", "MB", 52),
-            ("modified", "Modified", 128),
+            ("file", "File", 180),
+            ("arch", "Arch", 72),
+            ("est_uni", "Est. unified", 88),
+            ("delta_lb", "Δ vs LB", 78),
+            ("clean", "Clean", 72),
+            ("robust", "Robust", 72),
+            ("server_lb", "Server LB", 72),
+            ("status", "Status", 82),
+            ("scored_n", "Scored #", 58),
+            ("size_mb", "MB", 48),
+            ("modified", "Modified", 118),
         ]:
             self.file_tree.heading(c, text=t)
             self.file_tree.column(c, width=w)
-        self.file_tree.tag_configure("f_submitted", background="#e8f5e9")
-        self.file_tree.tag_configure("f_rejected", background="#ffebee")
-        self.file_tree.tag_configure("f_tried", background="#fff8e1")
-        self.file_tree.tag_configure("f_low_clean", background="#fff3e0")
+        self.file_tree.tag_configure("f_best", background="#b9f6ca", foreground="#1b5e20")
+        self.file_tree.tag_configure("f_good", background="#e8f5e9")
+        self.file_tree.tag_configure("f_submitted", background="#e3f2fd")
+        self.file_tree.tag_configure("f_rejected", background="#ffcdd2", foreground="#b71c1c")
+        self.file_tree.tag_configure("f_tried", background="#fff9c4")
+        self.file_tree.tag_configure("f_low_clean", background="#ffe0b2", foreground="#e65100")
+        self.file_tree.tag_configure("f_new", background="#fafafa")
+        self.file_tree.tag_configure("f_arch_warn", background="#fff3e0", foreground="#e65100")
+        legend_ck = ttk.Label(
+            pick_fr,
+            text="Colors: green = best est. unified · light green = near-best · blue = scored on LB · "
+            "yellow = tried · red = rejected · orange = unverified arch or clean gate fail · Arch? = guess only",
+            foreground="#616161",
+            font=("Segoe UI", 8),
+        )
+        legend_ck.pack(anchor=tk.W, pady=(0, 4))
         sb = ttk.Scrollbar(pick_fr, orient="vertical", command=self.file_tree.yview)
         self.file_tree.configure(yscrollcommand=sb.set)
         self.file_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -843,7 +1132,9 @@ class App(tk.Tk):
         btn_fr.pack(fill=tk.X, pady=6)
         ttk.Button(btn_fr, text="Browse .pt…", command=self._browse).pack(side=tk.LEFT)
         ttk.Button(btn_fr, text="Refresh", command=self._refresh_list).pack(side=tk.LEFT, padx=6)
-        ttk.Label(btn_fr, text="Architecture:").pack(side=tk.LEFT, padx=(12, 4))
+        ttk.Button(btn_fr, text="Eval all (quick)", command=self._eval_all_local).pack(side=tk.LEFT, padx=6)
+        ttk.Label(btn_fr, text="Submit as:").pack(side=tk.LEFT, padx=(12, 4))
+        self.arch_hint_var = tk.StringVar(value="auto-detected per file")
         ttk.Combobox(
             btn_fr,
             textvariable=self.model_name_var,
@@ -851,6 +1142,9 @@ class App(tk.Tk):
             width=12,
             state="readonly",
         ).pack(side=tk.LEFT)
+        ttk.Label(btn_fr, textvariable=self.arch_hint_var, foreground="#616161", font=("Segoe UI", 8)).pack(
+            side=tk.LEFT, padx=(8, 0)
+        )
 
         path_fr = ttk.Frame(self, padding=(12, 0, 12, 4))
         path_fr.pack(fill=tk.X)
@@ -904,22 +1198,36 @@ class App(tk.Tk):
 
         hist_fr = ttk.Frame(nb, padding=4)
         nb.add(hist_fr, text="History")
-        hcols = ("time", "file", "arch", "http", "eval", "clean", "robust", "unified", "lb_after", "message")
+        ttk.Label(
+            hist_fr,
+            text="LB change: ↑ improved · → same · ↓ worse (server keeps best score per team) · red = rejected",
+            foreground="#616161",
+            font=("Segoe UI", 8),
+        ).pack(anchor=tk.W, pady=(0, 4))
+        hcols = ("time", "file", "arch", "http", "eval", "clean", "robust", "unified", "lb_before", "lb_after", "lb_change", "message")
         self.hist_tree = ttk.Treeview(hist_fr, columns=hcols, show="headings", height=14)
         for c, t, w in [
-            ("time", "Time UTC", 128),
-            ("file", "Checkpoint", 150),
-            ("arch", "Arch", 64),
-            ("http", "HTTP", 44),
-            ("eval", "Eval", 64),
-            ("clean", "Clean %", 72),
-            ("robust", "Robust %", 72),
-            ("unified", "Unified", 72),
-            ("lb_after", "LB score", 72),
-            ("message", "Server message", 300),
+            ("time", "Time UTC", 118),
+            ("file", "Checkpoint", 130),
+            ("arch", "Arch", 56),
+            ("http", "HTTP", 40),
+            ("eval", "Eval", 56),
+            ("clean", "Clean", 64),
+            ("robust", "Robust", 64),
+            ("unified", "Unified", 64),
+            ("lb_before", "LB before", 68),
+            ("lb_after", "LB after", 68),
+            ("lb_change", "Δ LB", 72),
+            ("message", "Message", 220),
         ]:
             self.hist_tree.heading(c, text=t)
             self.hist_tree.column(c, width=w)
+        self.hist_tree.tag_configure("h_up", background="#c8e6c9", foreground="#1b5e20")
+        self.hist_tree.tag_configure("h_same", background="#f5f5f5")
+        self.hist_tree.tag_configure("h_down", background="#ffe0b2")
+        self.hist_tree.tag_configure("h_reject", background="#ffcdd2", foreground="#b71c1c")
+        self.hist_tree.tag_configure("h_err", background="#f8bbd0")
+        self.hist_tree.tag_configure("h_reset", background="#e1bee7")
         hsb = ttk.Scrollbar(hist_fr, orient="vertical", command=self.hist_tree.yview)
         self.hist_tree.configure(yscrollcommand=hsb.set)
         self.hist_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -927,18 +1235,29 @@ class App(tk.Tk):
 
         queue_fr = ttk.Frame(nb, padding=4)
         nb.add(queue_fr, text="Queue")
-        qcols = ("pos", "file", "arch", "added", "attempts", "last")
+        ttk.Label(
+            queue_fr,
+            text="Each queue item stores its own architecture (auto-detected from weights). "
+            "Submit uses the Arch column — not the dropdown above.",
+            foreground="#616161",
+            font=("Segoe UI", 8),
+        ).pack(anchor=tk.W, pady=(0, 4))
+        qcols = ("pos", "file", "arch", "arch_src", "valid", "added", "attempts", "last")
         self.queue_tree = ttk.Treeview(queue_fr, columns=qcols, show="headings", height=8)
         for c, t, w in [
             ("pos", "#", 36),
-            ("file", "Checkpoint", 240),
+            ("file", "Checkpoint", 200),
             ("arch", "Arch", 72),
-            ("added", "Added UTC", 140),
-            ("attempts", "Try", 44),
-            ("last", "Last event", 320),
+            ("arch_src", "Detected", 72),
+            ("valid", "OK", 40),
+            ("added", "Added UTC", 118),
+            ("attempts", "Try", 40),
+            ("last", "Last event", 260),
         ]:
             self.queue_tree.heading(c, text=t)
             self.queue_tree.column(c, width=w)
+        self.queue_tree.tag_configure("q_ok", background="#e8f5e9")
+        self.queue_tree.tag_configure("q_bad", background="#ffcdd2", foreground="#b71c1c")
         qsb = ttk.Scrollbar(queue_fr, orient="vertical", command=self.queue_tree.yview)
         self.queue_tree.configure(yscrollcommand=qsb.set)
         self.queue_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -946,6 +1265,7 @@ class App(tk.Tk):
         qbtn = ttk.Frame(queue_fr)
         qbtn.pack(fill=tk.X, pady=4)
         ttk.Button(qbtn, text="Remove selected", command=self._queue_remove_selected).pack(side=tk.LEFT)
+        ttk.Button(qbtn, text="Re-detect arch", command=self._queue_redetect_arch).pack(side=tk.LEFT, padx=6)
         ttk.Button(qbtn, text="Clear queue", command=self._queue_clear).pack(side=tk.LEFT, padx=6)
 
         top3_fr = ttk.Frame(nb, padding=4)
@@ -975,6 +1295,120 @@ class App(tk.Tk):
         self._reload_top3_table()
         self.after(500, self._tick_timer)
 
+    def _setup_theme(self) -> None:
+        style = ttk.Style(self)
+        if "vista" in style.theme_names():
+            style.theme_use("vista")
+        elif "clam" in style.theme_names():
+            style.theme_use("clam")
+        style.configure("Header.TLabel", font=("Segoe UI", 14, "bold"), foreground="#1565c0")
+        style.configure("Stats.TLabel", font=("Segoe UI", 9), foreground="#424242")
+        style.configure("Treeview", rowheight=24, font=("Segoe UI", 9))
+        style.configure("Treeview.Heading", font=("Segoe UI", 9, "bold"))
+
+    def _update_stats_bar(self) -> None:
+        ref = self._team_lb_ref
+        ref_s = f"{ref:.4f}" if ref else "—"
+        n_ckpt = len(self.file_tree.get_children()) if hasattr(self, "file_tree") else 0
+        n_scored = sum(
+            1
+            for m in self._local_metrics_cache.values()
+            if isinstance(m, dict) and m.get("unified_score") is not None
+        )
+        n_hist = len(load_history_rows(500))
+        self.stats_var.set(
+            f"Team LB reference: {ref_s} · {n_ckpt} checkpoints · {n_scored} locally scored · {n_hist} history entries"
+        )
+
+    def _unified_sort_key(self, metrics: dict[str, Any], state: dict[str, Any]) -> float:
+        u = parse_lb_float(metrics.get("unified_score"))
+        if u is None:
+            u = parse_lb_float(state.get("last_lb_score", state.get("last_unified_score")))
+        if u is None:
+            return -1.0
+        if u > 1.0:
+            u = u / 100.0
+        return u
+
+    def _history_row_tag(self, row: dict[str, Any]) -> str:
+        if str(row.get("submission_trigger", "")) == "local_reset":
+            return "h_reset"
+        if row.get("error"):
+            return "h_err"
+        http = row.get("http_status")
+        try:
+            http_i = int(http or 0)
+        except (TypeError, ValueError):
+            http_i = 0
+        eval_st = str(row.get("eval_status", "")).lower()
+        if http_i != 200 or eval_st == "failed":
+            return "h_reject"
+        before = parse_lb_float(row.get("leaderboard_score_before"))
+        after = parse_lb_float(row.get("leaderboard_score_after"))
+        if before is not None and after is not None:
+            d = after - before
+            if d > LB_SCORE_EPS:
+                return "h_up"
+            if d < -LB_SCORE_EPS:
+                return "h_down"
+        if row.get("leaderboard_score_unchanged"):
+            return "h_same"
+        return "h_same"
+
+    def _resolve_arch_for_path(
+        self,
+        path: Path | str,
+        *,
+        submit_state: dict[str, Any] | None = None,
+        progress_architecture: str | None = None,
+    ) -> dict[str, Any]:
+        p = Path(path)
+        history_name = None
+        if submit_state:
+            history_name = str(submit_state.get("last_model_name", "")).strip() or None
+            if history_name not in ALLOWED_ARCHITECTURES:
+                history_name = None
+        return resolve_checkpoint_architecture(
+            p,
+            history_model_name=history_name,
+            progress_architecture=progress_architecture,
+            cache=self._arch_cache,
+        )
+
+    def _arch_for_submit(
+        self,
+        path: Path,
+        *,
+        submit_state: dict[str, Any] | None = None,
+        progress_architecture: str | None = None,
+        allow_override: bool = True,
+    ) -> str:
+        resolved = self._resolve_arch_for_path(
+            path,
+            submit_state=submit_state,
+            progress_architecture=progress_architecture,
+        )
+        arch = str(resolved.get("architecture") or DEFAULT_MODEL_NAME)
+        if not resolved.get("validated"):
+            raise ValueError(
+                f"Cannot verify architecture for {path.name}. "
+                f"Best guess: {arch} ({architecture_source_short(resolved)}). "
+                "Re-download the checkpoint or add a .meta.json sidecar."
+            )
+        override = self.model_name_var.get().strip()
+        if allow_override and override in ALLOWED_ARCHITECTURES and override != arch:
+            if not messagebox.askyesno(
+                "Architecture override",
+                f"{path.name}\n\nAuto-detected (verified): {arch}\nDropdown override: {override}\n\n"
+                f"Use verified {arch}? (Recommended: Yes)",
+            ):
+                try:
+                    validate_checkpoint_file(path, override)
+                    return override
+                except Exception as e:
+                    raise ValueError(f"Override {override} failed: {e}") from e
+        return arch
+
     def _log(self, msg: str) -> None:
         self.log.configure(state=tk.NORMAL)
         self.log.insert(tk.END, msg + "\n")
@@ -990,8 +1424,24 @@ class App(tk.Tk):
         meta = self._file_tree_meta.get(sel[0], {})
         state = meta.get("history", {})
         metrics = meta.get("metrics", {})
+        resolved = meta.get("architecture") or self._resolve_arch_for_path(
+            self._selected_abs,
+            submit_state=state if isinstance(state, dict) else None,
+            progress_architecture=str(metrics.get("architecture", "")).strip() or None,
+        )
+        arch = str(resolved.get("architecture") or DEFAULT_MODEL_NAME)
+        self.model_name_var.set(arch)
+        src = architecture_source_short(resolved)
+        if resolved.get("validated"):
+            self.arch_hint_var.set(f"verified via {src}")
+        else:
+            self.arch_hint_var.set(f"unverified guess ({src}) — run Validate before submit")
         self.selected_metrics_var.set(
-            metrics_summary_text(metrics if isinstance(metrics, dict) else {}, state if isinstance(state, dict) else None)
+            metrics_summary_text(
+                metrics if isinstance(metrics, dict) else {},
+                state if isinstance(state, dict) else None,
+                reference_lb=self._team_lb_ref,
+            )
         )
         self.selected_history_var.set(submit_state_detail_text(state) if isinstance(state, dict) else "History: —")
 
@@ -1013,6 +1463,8 @@ class App(tk.Tk):
                 paths.append(bp)
         self._progress_metrics = discover_progress_metrics()
         self._local_metrics_cache = load_local_metrics_cache()
+        self._arch_cache = load_architecture_cache()
+        self._team_lb_ref = reference_lb_from_history() or self._team_lb_ref
         path_index, name_index = build_submit_history_index()
         selected_before = _normalize_path_str(self._selected_abs) if self._selected_abs else ""
 
@@ -1021,7 +1473,7 @@ class App(tk.Tk):
         self._file_tree_paths.clear()
         self._file_tree_meta.clear()
 
-        rows: list[tuple[str, tuple[Any, ...], str, dict[str, Any], dict[str, Any], str]] = []
+        rows: list[tuple[float, tuple[Any, ...], str, dict[str, Any], dict[str, Any], str, dict[str, Any]]] = []
         for full in paths:
             p = Path(full).resolve()
             state = summarize_submit_state(str(p), path_index, name_index)
@@ -1043,19 +1495,31 @@ class App(tk.Tk):
             clean_v = metrics.get("clean_acc")
             if isinstance(clean_v, (int, float)) and float(clean_v) <= MIN_CLEAN_ACC and tag == "f_new":
                 tag = "f_low_clean"
+            resolved = self._resolve_arch_for_path(
+                p,
+                submit_state=state,
+                progress_architecture=str(metrics.get("architecture", "")).strip() or None,
+            )
+            arch_label = architecture_label(resolved)
             server_lb = state.get("last_lb_score", state.get("last_unified_score"))
             server_lb_s = _fmt_lb(server_lb) if server_lb is not None else "—"
+            est_uni = fmt_unified_decimal(metrics.get("unified_score"))
+            delta_s = lb_delta_text(metrics.get("unified_score"), self._team_lb_ref)
             try:
                 st = p.stat()
                 size_mb = f"{st.st_size / 1e6:.1f}"
                 mtime = time.strftime("%Y-%m-%d %H:%M", time.localtime(st.st_mtime))
             except OSError:
                 size_mb, mtime = "—", "—"
+            sort_key = self._unified_sort_key(metrics, state)
             rows.append(
                 (
-                    p.name,
+                    sort_key,
                     (
                         p.name,
+                        arch_label,
+                        est_uni,
+                        delta_s,
                         fmt_pct(metrics.get("clean_acc")),
                         fmt_pct(metrics.get("robust_acc")),
                         server_lb_s,
@@ -1068,14 +1532,29 @@ class App(tk.Tk):
                     state,
                     metrics,
                     tag,
+                    resolved,
                 )
             )
-        rows.sort(key=lambda x: x[0])
+
+        best_uni = max((r[0] for r in rows if r[0] >= 0), default=-1.0)
+        rows.sort(key=lambda x: (-x[0], x[1][0].lower()))
         selected_iid = ""
-        for idx, (_n, vals, abspath, state, metrics, tag) in enumerate(rows):
+        for idx, (sort_key, vals, abspath, state, metrics, tag, resolved) in enumerate(rows):
+            if tag not in ("f_rejected", "f_low_clean") and best_uni >= 0 and resolved.get("validated"):
+                if abs(sort_key - best_uni) <= LB_SCORE_EPS:
+                    tag = "f_best"
+                elif sort_key >= best_uni - 0.002 and tag in ("f_new", "f_tried", "f_submitted"):
+                    tag = "f_good"
+            elif not resolved.get("validated") and tag not in ("f_rejected", "f_low_clean"):
+                tag = "f_arch_warn"
             iid = f"r{idx}"
             self._file_tree_paths[iid] = abspath
-            self._file_tree_meta[iid] = {"path": abspath, "history": state, "metrics": metrics}
+            self._file_tree_meta[iid] = {
+                "path": abspath,
+                "history": state,
+                "metrics": metrics,
+                "architecture": resolved,
+            }
             self.file_tree.insert("", tk.END, iid=iid, values=vals, tags=(tag,))
             if selected_before and _normalize_path_str(abspath) == selected_before:
                 selected_iid = iid
@@ -1083,7 +1562,8 @@ class App(tk.Tk):
             iid = selected_iid or self.file_tree.get_children()[0]
             self.file_tree.selection_set(iid)
             self._on_file_pick()
-        self._log(f"Listed {len(rows)} checkpoint(s) from {scan}")
+        self._update_stats_bar()
+        self._log(f"Listed {len(rows)} checkpoint(s) from {scan} — sorted by est. unified")
 
     def _selected_path(self) -> Path | None:
         if not self._selected_abs:
@@ -1097,9 +1577,23 @@ class App(tk.Tk):
 
     def _validate(self) -> None:
         p = self._selected_path()
-        arch = self._current_model_name()
         if p is None:
             messagebox.showerror("Validate", "Select a checkpoint first.")
+            return
+        sel = self.file_tree.selection()
+        meta = self._file_tree_meta.get(sel[0], {}) if sel else {}
+        state = meta.get("history", {}) if isinstance(meta.get("history"), dict) else {}
+        metrics = meta.get("metrics", {}) if isinstance(meta.get("metrics"), dict) else {}
+        try:
+            arch = self._arch_for_submit(
+                p,
+                submit_state=state,
+                progress_architecture=str(metrics.get("architecture", "")).strip() or None,
+                allow_override=True,
+            )
+        except Exception as e:
+            messagebox.showerror("Validate", str(e))
+            self._log(f"VALIDATE FAIL: {e}")
             return
         try:
             validate_checkpoint_file(p, arch)
@@ -1107,10 +1601,13 @@ class App(tk.Tk):
             messagebox.showerror("Validate", str(e))
             self._log(f"VALIDATE FAIL: {e}")
             return
+        self.model_name_var.set(arch)
+        self.arch_hint_var.set("verified via state_dict")
         messagebox.showinfo("Validate", f"OK — {p.name} loads as {arch}, output shape (1, 9).")
         self._log(f"VALIDATE OK: {p.name} ({arch})")
         self._settings["default_model_name"] = arch
         save_settings(self._settings)
+        self._refresh_list()
 
     def _update_leaderboard(self) -> None:
         team = str(self._settings.get("team_name") or DEFAULT_TEAM_NAME).strip()
@@ -1145,11 +1642,14 @@ class App(tk.Tk):
         rank, sc = lookup_team_row(rows, team)
         if rank is not None and sc is not None:
             self.lb_mine_var.set(f"Your team ({team}): rank {rank}/{len(rows)} — score {sc:.6f}")
+            self._team_lb_ref = sc
         else:
             self.lb_mine_var.set(f"Your team ({team}): not found — check Settings.")
         self.lb_status_var.set(f"Updated {utc_now()} · {len(rows)} teams")
         append_top3_snapshot(rows, "manual_update")
         self._reload_top3_table()
+        self._update_stats_bar()
+        self._refresh_list()
         self._log(f"LEADERBOARD OK: {len(rows)} teams")
 
     def _start_submit(
@@ -1300,8 +1800,12 @@ class App(tk.Tk):
                     entry["queue_item_id"] = queue_id
                     entry["queue_attempt"] = queue_attempt
                 append_history(entry)
+                sc_after_f = parse_lb_float(lb_after_str)
+                if sc_after_f is not None:
+                    self._team_lb_ref = sc_after_f
                 self.lb_last_var.set(
-                    f"Last submit: eval {eval_label} | clean {clean_s} | robust {robust_s} | LB {lb_before_str}->{lb_after_str}"
+                    f"Last submit: eval {eval_label} | clean {clean_s} | robust {robust_s} | "
+                    f"LB {lb_before_str} → {lb_after_str} ({format_history_lb_change(lb_before_str, lb_after_str)})"
                 )
                 for ln in detail_lines:
                     self._log(ln)
@@ -1326,6 +1830,7 @@ class App(tk.Tk):
                 self._reload_history_table()
                 self._reload_queue_table()
                 self._reload_top3_table()
+                self._update_stats_bar()
                 if err:
                     messagebox.showerror("Submit", err)
                 elif status == 200:
@@ -1376,7 +1881,21 @@ class App(tk.Tk):
             return
         if not self._confirm_submit_allowed(p):
             return
-        self._start_submit(p, self._current_model_name(), trigger="manual")
+        sel = self.file_tree.selection()
+        meta = self._file_tree_meta.get(sel[0], {}) if sel else {}
+        state = meta.get("history", {}) if isinstance(meta.get("history"), dict) else {}
+        metrics = meta.get("metrics", {}) if isinstance(meta.get("metrics"), dict) else {}
+        try:
+            arch = self._arch_for_submit(
+                p,
+                submit_state=state,
+                progress_architecture=str(metrics.get("architecture", "")).strip() or None,
+                allow_override=True,
+            )
+        except Exception as e:
+            messagebox.showerror("Submit", str(e))
+            return
+        self._start_submit(p, arch, trigger="manual")
 
     def _reset_local_cooldown(self) -> None:
         if not messagebox.askyesno(
@@ -1409,14 +1928,22 @@ class App(tk.Tk):
 
     def _local_eval(self) -> None:
         p = self._selected_path()
-        arch = self._current_model_name()
         if p is None:
             messagebox.showerror("Local eval", "Select a checkpoint first.")
             return
         if self._local_eval_in_flight:
             return
+        sel = self.file_tree.selection()
+        meta = self._file_tree_meta.get(sel[0], {}) if sel else {}
+        state = meta.get("history", {}) if isinstance(meta.get("history"), dict) else {}
+        metrics = meta.get("metrics", {}) if isinstance(meta.get("metrics"), dict) else {}
         try:
-            validate_checkpoint_file(p, arch)
+            arch = self._arch_for_submit(
+                p,
+                submit_state=state,
+                progress_architecture=str(metrics.get("architecture", "")).strip() or None,
+                allow_override=True,
+            )
         except Exception as e:
             messagebox.showerror("Local eval", str(e))
             return
@@ -1445,9 +1972,82 @@ class App(tk.Tk):
                 self._log(
                     f"LOCAL EVAL OK: clean {fmt_pct(metrics.get('clean_acc'))} | "
                     f"robust {fmt_pct(metrics.get('robust_acc'))} (quick) | "
-                    f"unified {fmt_pct(metrics.get('unified_score'))}"
+                    f"unified {fmt_unified_decimal(metrics.get('unified_score'))} "
+                    f"({lb_delta_text(metrics.get('unified_score'), self._team_lb_ref)} vs LB)"
                 )
-                messagebox.showinfo("Local eval", metrics_summary_text(metrics, None))
+                messagebox.showinfo(
+                    "Local eval",
+                    metrics_summary_text(metrics, None, reference_lb=self._team_lb_ref),
+                )
+
+            self.after(0, done)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _eval_all_local(self) -> None:
+        if self._batch_eval_in_flight or self._local_eval_in_flight:
+            return
+        children = list(self.file_tree.get_children())
+        if not children:
+            messagebox.showinfo("Eval all", "No checkpoints listed.")
+            return
+        jobs: list[tuple[Path, str]] = []
+        for iid in children:
+            abspath = self._file_tree_paths.get(iid, "")
+            if not abspath:
+                continue
+            p = Path(abspath)
+            meta = self._file_tree_meta.get(iid, {})
+            resolved = meta.get("architecture")
+            if not isinstance(resolved, dict):
+                state = meta.get("history", {}) if isinstance(meta.get("history"), dict) else {}
+                metrics = meta.get("metrics", {}) if isinstance(meta.get("metrics"), dict) else {}
+                resolved = self._resolve_arch_for_path(
+                    p,
+                    submit_state=state,
+                    progress_architecture=str(metrics.get("architecture", "")).strip() or None,
+                )
+            if not resolved.get("validated"):
+                continue
+            jobs.append((p, str(resolved.get("architecture") or DEFAULT_MODEL_NAME)))
+        if not jobs:
+            return
+        if not messagebox.askyesno(
+            "Eval all",
+            f"Run quick local eval on {len(jobs)} checkpoint(s)?\n"
+            "Uses val split + 12-batch robust (same as single Local eval).",
+        ):
+            return
+        self._batch_eval_in_flight = True
+        self.selected_metrics_var.set(f"Metrics: batch eval running ({len(jobs)} files)…")
+        self._log(f"BATCH EVAL start: {len(jobs)} checkpoint(s)")
+
+        def worker() -> None:
+            ok, fail = 0, 0
+            for p, arch in jobs:
+                try:
+                    validate_checkpoint_file(p, arch)
+                    metrics = run_local_eval_checkpoint(p, arch, quick=True)
+                    key = _normalize_path_str(p)
+                    self._local_metrics_cache[key] = metrics
+                    ok += 1
+                    self.after(
+                        0,
+                        lambda n=p.name, m=metrics, ref=self._team_lb_ref: self._log(
+                            f"  OK {n}: unified {fmt_unified_decimal(m.get('unified_score'))} "
+                            f"({lb_delta_text(m.get('unified_score'), ref)} vs LB)"
+                        ),
+                    )
+                except Exception as e:
+                    fail += 1
+                    self.after(0, lambda n=p.name, err=str(e): self._log(f"  FAIL {n}: {err}"))
+
+            def done() -> None:
+                self._batch_eval_in_flight = False
+                save_local_metrics_cache(self._local_metrics_cache)
+                self._refresh_list()
+                messagebox.showinfo("Eval all", f"Finished: {ok} OK, {fail} failed.")
+                self._log(f"BATCH EVAL done: {ok} OK, {fail} failed")
 
             self.after(0, done)
 
@@ -1457,14 +2057,36 @@ class App(tk.Tk):
         self._settings["auto_submit_queue"] = bool(self.auto_queue_var.get())
         save_settings(self._settings)
 
+    def _queue_sync_item_arch(self, item: dict[str, Any], *, save: bool = False) -> dict[str, Any]:
+        path = Path(str(item.get("model_path", "")))
+        if not path.is_file():
+            item["arch_validated"] = False
+            item["last_event"] = "Missing file"
+            return item
+        resolved = self._resolve_arch_for_path(path)
+        item["model_name"] = str(resolved.get("architecture") or DEFAULT_MODEL_NAME)
+        item["arch_source"] = architecture_source_short(resolved)
+        item["arch_validated"] = bool(resolved.get("validated"))
+        if save:
+            save_submit_queue(self._queue_items)
+        return item
+
     def _queue_add_selected(self) -> None:
         p = self._selected_path()
-        arch = self._current_model_name()
         if p is None:
             messagebox.showerror("Queue", "Select a checkpoint.")
             return
+        sel = self.file_tree.selection()
+        meta = self._file_tree_meta.get(sel[0], {}) if sel else {}
+        state = meta.get("history", {}) if isinstance(meta.get("history"), dict) else {}
+        metrics = meta.get("metrics", {}) if isinstance(meta.get("metrics"), dict) else {}
         try:
-            validate_checkpoint_file(p, arch)
+            arch = self._arch_for_submit(
+                p,
+                submit_state=state,
+                progress_architecture=str(metrics.get("architecture", "")).strip() or None,
+                allow_override=False,
+            )
         except Exception as e:
             messagebox.showerror("Queue", str(e))
             return
@@ -1477,16 +2099,34 @@ class App(tk.Tk):
             "model_path": resolved,
             "model_basename": p.name,
             "model_name": arch,
+            "arch_source": "verified",
+            "arch_validated": True,
             "added_ts_utc": utc_now(),
             "attempts": 0,
-            "last_event": "Queued",
+            "last_event": f"Queued as {arch}",
             "last_event_ts_utc": utc_now(),
         }
         self._queue_items.append(item)
         save_submit_queue(self._queue_items)
         append_queue_event({"action": "queued", "model_basename": p.name, "model_name": arch})
         self._reload_queue_table()
-        self._log(f"QUEUE ADD: {p.name}")
+        self._log(f"QUEUE ADD: {p.name} → {arch} (verified)")
+
+    def _queue_redetect_arch(self) -> None:
+        if not self._queue_items:
+            return
+        changed = 0
+        for item in self._queue_items:
+            before = str(item.get("model_name", ""))
+            self._queue_sync_item_arch(item)
+            after = str(item.get("model_name", ""))
+            if before != after:
+                changed += 1
+                item["last_event"] = f"Arch updated {before} → {after}"
+        save_submit_queue(self._queue_items)
+        self._reload_queue_table()
+        self._log(f"QUEUE ARCH: re-detected {len(self._queue_items)} item(s), {changed} changed")
+        messagebox.showinfo("Queue", f"Re-detected architecture for {len(self._queue_items)} item(s).\n{changed} updated.")
 
     def _queue_remove_selected(self) -> None:
         sel = self.queue_tree.selection()
@@ -1517,7 +2157,10 @@ class App(tk.Tk):
         for i in self.queue_tree.get_children():
             self.queue_tree.delete(i)
         for pos, item in enumerate(self._queue_items, 1):
+            self._queue_sync_item_arch(item)
             qid = str(item.get("queue_id"))
+            validated = bool(item.get("arch_validated"))
+            tag = "q_ok" if validated else "q_bad"
             self.queue_tree.insert(
                 "",
                 tk.END,
@@ -1526,11 +2169,15 @@ class App(tk.Tk):
                     pos,
                     item.get("model_basename"),
                     item.get("model_name"),
+                    item.get("arch_source", "—"),
+                    "yes" if validated else "no",
                     item.get("added_ts_utc"),
                     item.get("attempts", 0),
                     item.get("last_event"),
                 ),
+                tags=(tag,),
             )
+        save_submit_queue(self._queue_items)
 
     def _reload_history_table(self) -> None:
         for i in self.hist_tree.get_children():
@@ -1544,7 +2191,13 @@ class App(tk.Tk):
             clean = row.get("clean_accuracy", ev.get("clean_acc"))
             robust = row.get("robustness_accuracy", ev.get("robust_acc"))
             unified = row.get("unified_score", ev.get("unified_score"))
-            msg = str(row.get("server_message", ev.get("message", "")) or "")
+            lb_before = row.get("leaderboard_score_before", "")
+            lb_after = row.get("leaderboard_score_after", "")
+            lb_change = format_history_lb_change(lb_before, lb_after)
+            if str(row.get("submission_trigger", "")) == "local_reset":
+                lb_change = "reset"
+            msg = str(row.get("server_message", ev.get("message", "")) or row.get("log_summary", "") or "")
+            tag = self._history_row_tag(row)
             self.hist_tree.insert(
                 "",
                 tk.END,
@@ -1557,11 +2210,16 @@ class App(tk.Tk):
                     row.get("eval_status", ev.get("eval_status", "")),
                     fmt_pct(clean),
                     fmt_pct(robust),
-                    fmt_pct(unified),
-                    row.get("leaderboard_score_after", ""),
-                    msg[:320],
+                    fmt_unified_decimal(unified),
+                    fmt_unified_decimal(lb_before) if lb_before not in ("", "unknown") else lb_before,
+                    fmt_unified_decimal(lb_after) if lb_after not in ("", "unknown") else lb_after,
+                    lb_change,
+                    msg[:280],
                 ),
+                tags=(tag,),
             )
+        self._team_lb_ref = reference_lb_from_history() or self._team_lb_ref
+        self._update_stats_bar()
 
     def _reload_top3_table(self) -> None:
         for i in self.top3_tree.get_children():
@@ -1592,9 +2250,16 @@ class App(tk.Tk):
         head = self._queue_items[0]
         qid = str(head.get("queue_id"))
         path = Path(str(head.get("model_path")))
+        self._queue_sync_item_arch(head, save=True)
+        if not head.get("arch_validated"):
+            self._pause_queue(qid, path.name, f"Cannot verify architecture for {path.name}")
+            self._reload_queue_table()
+            return
         arch = str(head.get("model_name") or DEFAULT_MODEL_NAME)
         head["attempts"] = int(head.get("attempts", 0)) + 1
+        head["last_event"] = f"Submitting as {arch}"
         save_submit_queue(self._queue_items)
+        self._reload_queue_table()
         self._start_submit(path, arch, trigger="queue_auto", queue_id=qid, queue_attempt=int(head["attempts"]))
 
     def _tick_timer(self) -> None:
@@ -1618,14 +2283,20 @@ class App(tk.Tk):
         self.submit_btn.configure(state=tk.NORMAL if can else tk.DISABLED)
 
         if self._queue_items:
-            head = self._queue_items[0].get("model_basename", "")
+            head = self._queue_items[0]
+            head_name = head.get("model_basename", "")
+            head_arch = head.get("model_name", DEFAULT_MODEL_NAME)
             if self.auto_queue_var.get() and can:
-                self.queue_status_var.set(f"Queue: {len(self._queue_items)} — auto-ready → {head}")
+                self.queue_status_var.set(
+                    f"Queue: {len(self._queue_items)} — auto-ready → {head_name} as {head_arch}"
+                )
                 if not self._queue_launch_pending:
                     self._queue_launch_pending = True
                     self.after(50, self._submit_queue_head_if_ready)
             else:
-                self.queue_status_var.set(f"Queue: {len(self._queue_items)} pending — next {head}")
+                self.queue_status_var.set(
+                    f"Queue: {len(self._queue_items)} pending — next {head_name} as {head_arch}"
+                )
         else:
             self.queue_status_var.set("Queue: empty")
 

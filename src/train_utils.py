@@ -10,6 +10,7 @@ from typing import Any
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.optim.lr_scheduler import LRScheduler
 
 
@@ -240,6 +241,65 @@ def train_one_epoch_pgd(
                 f"Epoch {epoch}/{total_epochs} | batch {batch_idx}/{n_batches} "
                 f"({pct(batch_idx, n_batches)}) | adv loss {loss.item():.4f} | "
                 f"PGD-{steps} | {elapsed:.0f}s elapsed",
+                step="TRAIN",
+            )
+
+    return total_loss / max(n, 1)
+
+
+def train_one_epoch_trades(
+    model: nn.Module,
+    loader,
+    optimizer: torch.optim.Optimizer,
+    criterion: nn.Module,
+    device: torch.device,
+    *,
+    eps: float,
+    alpha: float,
+    steps: int,
+    beta: float,
+    epoch: int,
+    total_epochs: int,
+    log_every: int = 50,
+) -> float:
+    """TRADES: CE on clean + beta * KL(model(x_adv) || model(x))."""
+    model.train()
+    total_loss = 0.0
+    n = 0
+    n_batches = len(loader)
+    t0 = time.time()
+
+    for batch_idx, (x, y) in enumerate(loader, start=1):
+        x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
+        x_adv = pgd(model, x, y, eps=eps, alpha=alpha, steps=steps, random_start=True)
+        model.train()
+        optimizer.zero_grad(set_to_none=True)
+
+        logits_nat = model(x)
+        loss_nat = criterion(logits_nat, y)
+
+        with torch.no_grad():
+            logits_clean = model(x)
+        logits_adv = model(x_adv)
+        loss_rob = F.kl_div(
+            F.log_softmax(logits_adv, dim=1),
+            F.softmax(logits_clean, dim=1),
+            reduction="batchmean",
+        )
+        loss = loss_nat + beta * loss_rob
+        loss.backward()
+        optimizer.step()
+
+        total_loss += loss.item() * y.size(0)
+        n += y.size(0)
+
+        if batch_idx == 1 or batch_idx % log_every == 0 or batch_idx == n_batches:
+            elapsed = time.time() - t0
+            log(
+                f"Epoch {epoch}/{total_epochs} | batch {batch_idx}/{n_batches} "
+                f"({pct(batch_idx, n_batches)}) | loss {loss.item():.4f} "
+                f"(nat {loss_nat.item():.4f} rob {loss_rob.item():.4f}) | "
+                f"TRADES PGD-{steps} beta={beta:g} | {elapsed:.0f}s elapsed",
                 step="TRAIN",
             )
 

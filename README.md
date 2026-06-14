@@ -21,8 +21,10 @@ Train a ResNet image classifier that stays accurate on **clean** and **adversari
 | Step 1 — Standard training baseline (ERM) | **Done** — LB **0.486371** (`docs/STEP1_ERM_RESULTS.md`) |
 | Step 2 — FGSM adversarial training | **Done** — unified 0.410 (warm-up only) |
 | Step 3 — PGD adversarial training | **Done** — 80 epochs; LB **0.575136** (`docs/STEP3_PGD_RESULTS.md`) |
-| **Submittable snapshot (CMS)** | **`docs/SUBMISSION_SNAPSHOT.md`** — v1.0, best: `pgd_at_resnet18.pt` |
-| Phase 4 — Extend PGD-AT (optional) | **Ready** — epoch 80→120 (`docs/CLUSTER_STEP4.md`) |
+| Step 4 — TRADES β=6 fine-tune | **Done** — LB **0.575571** (`docs/SUBMISSION_SNAPSHOT.md`) |
+| **Best LB (current)** | **`trades_b8_resnet18.pt` — LB 0.582405** (`docs/TRADES_B8_RESULTS.md`, tag **`v1.2-submittable`**) |
+| v1.0 submittable (PGD-AT) | `pgd_at_resnet18.pt` — tag `v1.0-submittable` |
+| **Week 1 — TRADES sweeps + R34** | **β=8 won** — see `docs/CLUSTER_WEEK1.md` |
 | CMS report + ZIP | Not started |
 
 ---

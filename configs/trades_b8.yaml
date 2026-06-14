@@ -1,0 +1,20 @@
+# TRADES β=8 sweep — 20 ep from trades_r18 init (LB 0.5824)
+architecture: resnet18
+epochs: 20
+batch_size: 128
+lr: 0.003
+momentum: 0.9
+weight_decay: 0.0005
+milestones: [12, 16]
+gamma: 0.1
+pgd_eps: 0.031372549
+pgd_alpha: 0.007843137
+pgd_train_steps: 10
+pgd_eval_steps: 20
+trades_beta: 8.0
+robust_every: 0
+num_workers: 4
+save_every: 5
+tag: trades_b8
+init: results/checkpoints/trades_r18_resnet18.pt
+output: results/checkpoints/trades_b8_resnet18.pt

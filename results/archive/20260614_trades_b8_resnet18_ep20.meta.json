@@ -1,0 +1,16 @@
+{
+  "tag": "trades_b8",
+  "architecture": "resnet18",
+  "last_epoch": 20,
+  "trades_beta": 8.0,
+  "init_checkpoint": "results/checkpoints/trades_r18_resnet18.pt",
+  "remote_checkpoint": "~/tml26_task3/results/checkpoints/trades_b8_resnet18.pt",
+  "cluster_unified": 0.5774,
+  "local_quick_unified": 0.5858,
+  "server_lb_unified": 0.582405,
+  "local_clean_pct": 72.34,
+  "local_robust_pct": 44.82,
+  "submitted": true,
+  "submitted_utc": "2026-06-14",
+  "notes": "TRADES beta=8 sweep, 20 ep, lr=0.003. See docs/TRADES_B8_RESULTS.md"
+}

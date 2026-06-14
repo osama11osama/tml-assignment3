@@ -1,7 +1,7 @@
 # AI Agent Handoff — TML Assignment 3 (Adversarial Robustness)
 
 > **Purpose:** Give this file to a new AI agent (Cursor, ChatGPT, etc.) so it understands the full project, what happened in the recent conversation, and what to do next.  
-> **Last updated:** 2026-06-12 (v1.0 submittable — PGD-AT 80ep LB 0.575; Phase 4 ready)  
+> **Last updated:** 2026-06-14 (v1.2 submittable — TRADES β=8 LB **0.582405**; tag `v1.2-submittable`)  
 > **Student / cluster user:** `atml_team044`  
 > **Leaderboard team name:** `team_XLVII` (different from cluster username)
 
@@ -271,8 +271,8 @@ Submittable snapshot           v1.0 — docs/SUBMISSION_SNAPSHOT.md
 CMS report + ZIP               NOT STARTED
 ```
 
-**Best LB:** **0.575136** (`pgd_at_resnet18.pt`, ResNet18)  
-**Do not:** Re-submit unless local unified > 0.575; use Phase 4 for improvement
+**Best LB:** **0.582405** (`trades_b8_resnet18.pt`, TRADES β=8, ResNet18)  
+**Do not:** Re-submit `trades_b8` or weaker models; next submit only if local unified > **0.5824 + margin (~0.004)**
 
 ---
 
@@ -406,9 +406,88 @@ You are helping with **Trustworthy ML Assignment 3 (Adversarial Robustness)**.
 | `docs/CLUSTER_STEP3.md` | PGD-AT cluster runbook (chunks, GPU tuning, parallel trial) |
 | `docs/AI_AGENT_HANDOFF.md` | This file |
 | `docs/STEP3_PGD_RESULTS.md` | PGD-AT 80-epoch results + LB |
-| `docs/SUBMISSION_SNAPSHOT.md` | **CMS / v1.0 submittable snapshot** |
+| `docs/TRADES_B8_RESULTS.md` | **Full doc: β=8 pipeline, LB 0.5824, reproduce** |
+| `docs/SUBMISSION_SNAPSHOT.md` | **CMS snapshot — points to trades_b8** |
 | `docs/CLUSTER_STEP4.md` | Phase 4 extend training (→ epoch 120) |
 | `_private/AI cach/assignment3_master_guide.ipynb` | Full learning guide |
+
+---
+
+## 12. Sleep checkpoint — 2026-06-14 ~06:35
+
+**When user asks "what next?" — remind them of this section and ask for cluster results.**
+
+### Best LB so far (do not lose this)
+
+| Checkpoint | Server LB | Notes |
+|------------|-----------|-------|
+| **`trades_b8_resnet18.pt`** | **0.582405** | **CURRENT BEST — TRADES β=8, 20ep (`docs/TRADES_B8_RESULTS.md`)** |
+| `trades_r18_resnet18.pt` | 0.575571 | TRADES β=6 fallback |
+| `pgd_at_resnet18.pt` | 0.575136 | v1.0-submittable fallback |
+
+### What we did today
+
+1. Week 1: ERM R34 chunks 20→40→60→80; TRADES R18 40 ep → LB 0.575571
+2. Added `sync_from_cluster.ps1`, `eval_archive.py`, `results/archive/`
+3. Launched **parallel tracks** (`submit_parallel_tracks.sh max4`) — jobs **49897–49901**
+
+### Cluster jobs submitted (check `condor_q` / logs on wake)
+
+| Job | Track | Tag | Expected outcome |
+|-----|-------|-----|------------------|
+| 49897 | ERM R34 chunk 60 | `erm_r34` | Likely **done** |
+| 49898 | ERM R34 chunk 80 | `erm_r34` | **Done** — clean ~97%, robust ~0% |
+| 49899 | TRADES R34 chunk 20 | `trades_r34` | **Running** — init ERM R34; high KL epoch 1 is normal |
+| 49900 | TRADES β=4 pilot 20 ep | `trades_b4` | **Running** — compare only |
+| 49901 | TRADES β=8 pilot 20 ep | `trades_b8` | **Running** — compare only |
+
+### What we expect when cluster finishes
+
+| Track | Success looks like | LB submit? |
+|-------|-------------------|------------|
+| ERM R34 → 100 | clean >90%, robust ~0% | **No** (init only) |
+| TRADES R34 ep 20→40→… | unified val **> 0.575571** | **Yes if beats trades_r18** |
+| trades_b4 / trades_b8 | β sweep from trades_r18 | **b8 submitted — LB 0.582405; b4 skip (~0.536 local)** |
+
+### Pending cluster commands (after jobs finish)
+
+```bash
+cd ~/tml26_task3
+condor_q
+# ERM (if epoch 80 done, not 100):
+condor_submit scripts/cluster/condor/train_erm_r34_chunk100.sub
+# TRADES R34 (after chunk 20):
+condor_submit scripts/cluster/condor/train_trades_r34_chunk40.sub
+# Optional 5th GPU:
+bash scripts/cluster/submit_parallel_tracks.sh extend   # TRADES R18 → 60→80
+```
+
+### Ask user to paste these on wake-up
+
+1. Output of `condor_q` (empty or not)
+2. Tail of finished logs:
+   - `runlogs/trades_r34_chunk20_*.log`
+   - `runlogs/trades_b4_chunk20_*.log`
+   - `runlogs/trades_b8_chunk20_*.log`
+   - `runlogs/erm_r34_chunk100_*.log` (if submitted)
+3. Or: `TML3_TAG=trades_r34 TML3_ARCH=resnet34 TML3_FINAL_EPOCHS=80 bash scripts/cluster/check_train_progress.sh`
+
+### Copy locally + test (Windows)
+
+```powershell
+cd Assignment3
+powershell -ExecutionPolicy Bypass -File scripts/cluster/sync_from_cluster.ps1 -ClusterUser atml_team044 -Force
+python scripts/eval_archive.py
+```
+
+Then GUI: Refresh → **Local eval** → **Submit to LB only if unified > ~0.586** (local overestimates server by ~0.003)
+
+- `trades_r34_resnet34.pt` → architecture **resnet34**
+- `trades_r18_resnet18.pt` / `trades_b4` / `trades_b8` → **resnet18**
+
+### Deadline reminder
+
+**16 June 2026** — CMS report (PDF) + ZIP still needed.
 
 ---
 

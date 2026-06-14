@@ -1,0 +1,22 @@
+{
+    "archived_at": "2026-06-14T06:40:07+02:00",
+    "source": "manual scp from cluster (before sync overwrite)",
+    "tag": "erm_r34",
+    "architecture": "resnet34",
+    "remote_checkpoint": "~/tml26_task3/results/checkpoints/baseline_erm_r34_resnet34.pt",
+    "local_checkpoint": "results/archive/20260614_erm_r34_resnet34_ep80.pt",
+    "versioned_checkpoint": "results/checkpoints/baseline_erm_r34_resnet34_ep80.pt",
+    "last_epoch": 80,
+    "cluster_unified": 0.4860,
+    "notes": "Cluster chunk80 log: best clean 96.94%, final robust 0.26%, unified est. 0.4860",
+    "progress": {
+        "method": "erm_baseline",
+        "status": "finished",
+        "architecture": "resnet34",
+        "epochs_completed": 80,
+        "best_clean_acc": 0.9694,
+        "final_clean_acc": 0.9694,
+        "final_robust_acc": 0.0026,
+        "final_unified_score": 0.4860
+    }
+}

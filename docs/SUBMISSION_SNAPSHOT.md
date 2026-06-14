@@ -1,96 +1,148 @@
-# Submission Snapshot — v1.0 (CMS + Leaderboard)
-
-> **Release:** `v1.0-submittable`  
-> **Date:** 2026-06-12  
-> **Assignment:** TML SS2026 — Task `03-robustness`  
-> **Deadline:** 16 June 2026, 23:59
-
-This document describes the **current best leaderboard result** you can cite in the CMS report and reproduce from this repo.
-
----
-
-## Best model (leaderboard)
-
-| Field | Value |
-|-------|-------|
-| **Checkpoint** | `results/checkpoints/pgd_at_resnet18.pt` |
-| **Architecture** | `resnet18` |
-| **Method** | PGD adversarial training (Madry et al.) |
-| **Training** | 80 epochs; init from FGSM-AT; PGD-7 train / PGD-20 eval |
-| **Server unified score** | **0.575136** |
-| **Team name** | `team_XLVII` |
-| **Rank (approx.)** | ~24 / 35 |
-
----
-
-## Score progression
-
-| Submit | Model | Server unified |
-|--------|-------|----------------|
-| 1 | ERM baseline | 0.486371 |
-| 2 | PGD-AT (epoch 20) | 0.535790 |
-| 3 | **PGD-AT (epoch 80)** | **0.575136** ← **report this** |
-
----
-
-## Local validation (epoch 80, full val PGD-20)
-
-| Metric | Value |
-|--------|-------|
-| Clean accuracy | 67.88% |
-| Robust accuracy | 45.98% |
-| Unified | 0.5693 |
-
-Server score (0.575) can differ slightly — hidden test attack parameters (Tutorial 6).
-
----
-
-## How to reproduce (CMS README section)
-
-1. **Data:** `python scripts/download_data.py` → `data/train.npz`
-2. **Step 1 ERM:** `python scripts/train_standard.py --device cuda --epochs 100`
-3. **Step 2 FGSM-AT:** `python scripts/train_fgsm_at.py --device cuda --init results/checkpoints/baseline_erm_resnet18.pt`
-4. **Step 3 PGD-AT:** `python scripts/train_pgd_at.py --device cuda --init results/checkpoints/fgsm_at_resnet18.pt --epochs 80`
-   - Or cluster chunks: `docs/CLUSTER_STEP3.md`
-5. **Eval:** `python scripts/eval_model.py results/checkpoints/pgd_at_resnet18.pt --architecture resnet18`
-6. **Submit:** `submission.py` or `_private/tools/launch_submit_gui.ps1`
-
-**Attack params (assignment standard):** ε = 8/255, α = 2/255, PGD-20 for evaluation.
-
----
-
-## CMS ZIP contents (checklist)
-
-Include:
-
-- [ ] Source code (`src/`, `scripts/`, `configs/`)
-- [ ] `README.md` + this file (`docs/SUBMISSION_SNAPSHOT.md`)
-- [ ] 2-page PDF report (ICLR template, no abstract)
-- [ ] Matriculation number + CMS team ID in report
-
-Do **not** include:
-
-- [ ] `data/train.npz`, `.pt` weights, `.env`, `.venv/`
-
----
-
-## Report talking points
-
-1. **Baseline ERM:** high clean (~97%), ~0% robust → unified ~0.49.
-2. **FGSM-AT:** lifts robust slightly but hurts clean too much (unified 0.41).
-3. **PGD-AT:** main method; 80-epoch schedule with FGSM init; unified **0.575** on server.
-4. **Trade-off:** adversarial training reduces clean accuracy but greatly increases robustness.
-5. **References:** Goodfellow FGSM, Madry PGD-AT, Athalye obfuscated gradients (no masking tricks).
-
----
-
-## Version history
-
-| Version | Date | Best LB | Notes |
-|---------|------|---------|-------|
-| **v1.0** | 2026-06-12 | **0.575136** | PGD-AT ResNet18, 80 epochs — **submittable now** |
-| v1.1 (planned) | — | target 0.60+ | Phase 4: extend to epoch 120, PGD-10 — `docs/CLUSTER_STEP4.md` |
-
----
-
-*For full training logs and cluster workflow, see `docs/STEP3_PGD_RESULTS.md` and `docs/AI_AGENT_HANDOFF.md`.*
+# Submission Snapshot — Best Leaderboard Result
+
+> **Last updated:** 2026-06-14  
+> **Assignment:** TML SS2026 — Task `03-robustness`  
+> **Team:** `team_XLVII` | **Deadline:** 16 June 2026, 23:59  
+> **Git tag:** `v1.2-submittable`
+
+This document describes the **current best leaderboard result** for the CMS report and reproduction.
+
+**Full story (β=8 sweep):** `docs/TRADES_B8_RESULTS.md`
+
+---
+
+## Best model (leaderboard) — **current**
+
+| Field | Value |
+|-------|-------|
+| **Checkpoint** | `results/checkpoints/trades_b8_resnet18.pt` |
+| **Architecture** | `resnet18` |
+| **Method** | **TRADES β=8** fine-tune on TRADES-R18 init |
+| **Training** | 20 epochs; init `trades_r18_resnet18.pt`; PGD-10 train; β=**8**; lr=0.003 |
+| **Server unified score** | **0.582405** (~**0.5824**) |
+| **Rank (approx.)** | ~20 / 48 |
+
+---
+
+## How this model was created (full pipeline)
+
+```
+Step 1  ERM R18 (100 ep)          → baseline_erm_resnet18.pt     LB 0.486
+Step 2  FGSM-AT R18 (50 ep)       → fgsm_at_resnet18.pt          warm-up
+Step 3  PGD-AT R18 (80 ep)        → pgd_at_resnet18.pt           LB 0.575136
+Step 4  TRADES R18 β=6 (40 ep)    → trades_r18_resnet18.pt       LB 0.575571
+Step 5  TRADES β=8 (20 ep)        → trades_b8_resnet18.pt        LB 0.582405  ← BEST
+```
+
+### Step 5 — TRADES β=8 (current best)
+
+| Hyperparameter | Value |
+|----------------|-------|
+| Init checkpoint | `trades_r18_resnet18.pt` (TRADES β=6, 40 epochs) |
+| Loss | TRADES: natural CE + β·KL(f(x), f(x_adv)) |
+| β (trades_beta) | **8.0** |
+| PGD train steps | **10** (ε=8/255, α=2/255) |
+| Epochs | **20** |
+| Batch size | 128 |
+| Learning rate | **0.003** |
+| Cluster | 1× 1h Condor chunk |
+
+**Cluster:**
+
+```bash
+cd ~/tml26_task3
+condor_submit scripts/cluster/condor/train_trades_b8_r18_chunk20.sub
+# or: bash scripts/cluster/submit_parallel_tracks.sh max4
+```
+
+**Scripts / configs:**
+
+- `scripts/train_trades.py`
+- `scripts/cluster/run_trades_chunk.sh`
+- `configs/trades_b8.yaml`
+- Condor: `train_trades_b8_r18_chunk20.sub`
+
+**Pull + submit:**
+
+```powershell
+scp atml_team044@conduit2.hpc.uni-saarland.de:~/tml26_task3/results/checkpoints/trades_b8_resnet18.pt results/checkpoints/
+powershell -File _private/tools/launch_submit_gui.ps1
+# architecture: resnet18 (auto-detected)
+```
+
+---
+
+## Scores (local vs server)
+
+| Model | Local clean | Local robust | Local unified (quick) | **Server LB** |
+|-------|-------------|--------------|------------------------|---------------|
+| ERM R18 | 97.28% | 0.24% | ~0.487 | 0.486371 |
+| PGD-AT R18 | 69.44% | 46.94% | ~0.581 | 0.575136 |
+| TRADES R18 β=6 | 74.24% | 41.76% | ~0.580 | 0.575571 |
+| **TRADES β=8** | **72.34%** | **44.82%** | **0.5858** (est.) | **0.582405** |
+
+Local quick eval **overestimates** server by ~0.003 — use only for ranking models, not exact LB prediction.
+
+---
+
+## Score progression (submissions)
+
+| # | Model | Server unified |
+|---|-------|----------------|
+| 1 | ERM baseline | 0.486371 |
+| 2 | PGD-AT (epoch 20) | 0.535790 |
+| 3 | PGD-AT (epoch 80) | 0.575136 |
+| 4 | TRADES R18 β=6 | 0.575571 |
+| 5 | **TRADES β=8** | **0.582405** ← **cite this in CMS** |
+
+---
+
+## Reproduce Step 5 locally
+
+Prerequisites: `data/train.npz`, `results/checkpoints/trades_r18_resnet18.pt`
+
+```powershell
+python scripts/train_trades.py --device cuda `
+  --init results/checkpoints/trades_r18_resnet18.pt `
+  --tag trades_b8 --architecture resnet18 `
+  --epochs 20 --batch-size 128 --lr 0.003 `
+  --pgd-train-steps 10 --trades-beta 8.0 `
+  --robust-every 0 --save-every 5
+```
+
+---
+
+## Previous bests (fallback)
+
+| Tag | Checkpoint | Method | Server LB |
+|-----|------------|--------|-----------|
+| `v1.2-submittable` | `trades_b8_resnet18.pt` | TRADES β=8 | **0.582405** |
+| `v1.0-submittable` | `pgd_at_resnet18.pt` | PGD-AT 80 ep | 0.575136 |
+| — | `trades_r18_resnet18.pt` | TRADES β=6 | 0.575571 |
+
+---
+
+## CMS ZIP checklist
+
+**Include:**
+
+- [ ] Source code (`src/`, `scripts/`, `configs/`)
+- [ ] `README.md` + **this file** + `docs/TRADES_B8_RESULTS.md`
+- [ ] **2-page PDF report** (ICLR template) — ⚠️ **not in repo yet**
+- [ ] Matriculation number + CMS team ID in report
+
+**Do not include:** `data/train.npz`, `.pt` weights, `.env`, `.venv/`
+
+---
+
+## Version history
+
+| Version | Date | Best LB | Tag | Notes |
+|---------|------|---------|-----|-------|
+| v1.0 | 2026-06-12 | 0.575136 | `v1.0-submittable` | PGD-AT R18 |
+| v1.1 | 2026-06-14 | 0.575571 | — | TRADES R18 β=6 |
+| **v1.2** | **2026-06-14** | **0.582405** | **`v1.2-submittable`** | **TRADES β=8 — current best** |
+
+---
+
+*Cluster runbook: `docs/CLUSTER_WEEK1.md` | β=8 details: `docs/TRADES_B8_RESULTS.md`*

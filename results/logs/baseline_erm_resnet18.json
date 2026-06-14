@@ -1,0 +1,29 @@
+{
+  "method": "erm_baseline",
+  "architecture": "resnet18",
+  "epochs": 2,
+  "best_clean_acc": 0.5534,
+  "final_clean_acc": 0.5534,
+  "final_robust_acc": 0.0316,
+  "final_unified_score": 0.2925,
+  "checkpoint": "C:\\Users\\Osama\\Master\\SS2026\\01_Trustworthy Machine Learning\\Assignments\\Assignment3\\results\\checkpoints\\baseline_erm_resnet18.pt",
+  "elapsed_sec": 30.181457996368408,
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 1.87185120133294,
+      "clean_acc": 0.524,
+      "robust_acc": null,
+      "unified_score": null,
+      "lr": 0.1
+    },
+    {
+      "epoch": 2,
+      "train_loss": 1.182126082971361,
+      "clean_acc": 0.5534,
+      "robust_acc": 0.0328,
+      "unified_score": 0.2931,
+      "lr": 0.1
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+﻿{
+    "archived_at":  "2026-06-14T06:12:25.1825179+02:00",
+    "source":  "cluster:atml_team044@conduit2.hpc.uni-saarland.de",
+    "tag":  "erm_r18",
+    "architecture":  "resnet18",
+    "remote_checkpoint":  "~/tml26_task3/results/checkpoints/baseline_erm_resnet18.pt",
+    "local_checkpoint":  "results/archive/20260614_erm_r18_resnet18_epunk_una.pt",
+    "last_epoch":  "unk",
+    "cluster_unified":  null,
+    "progress":  null
+}

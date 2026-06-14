@@ -1,0 +1,20 @@
+# Week 2+ Track C — TRADES on ResNet-34 (after erm_r34 completes)
+architecture: resnet34
+epochs: 80
+batch_size: 128
+lr: 0.01
+momentum: 0.9
+weight_decay: 0.0005
+milestones: [50, 70]
+gamma: 0.1
+pgd_eps: 0.031372549
+pgd_alpha: 0.007843137
+pgd_train_steps: 10
+pgd_eval_steps: 20
+trades_beta: 6.0
+robust_every: 0
+num_workers: 4
+save_every: 3
+tag: trades_r34
+init: results/checkpoints/baseline_erm_r34_resnet34.pt
+output: results/checkpoints/trades_r34_resnet34.pt

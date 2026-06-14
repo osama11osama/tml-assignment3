@@ -4,7 +4,7 @@
 #   powershell -File scripts/cluster/sync_to_cluster.ps1 -ClusterUser atml_team044
 #
 param(
-    [string]$ClusterUser = "YOUR_CLUSTER_USER",
+    [string]$ClusterUser = "atml_team044",
     [string]$ClusterHost = "conduit2.hpc.uni-saarland.de",
     [string]$RemoteBase = "~/tml26_task3"
 )
@@ -44,8 +44,6 @@ Write-Host "Fixing CRLF line endings on cluster..."
 ssh $Remote 'cd ~/tml26_task3 && find scripts/cluster -type f \( -name "*.sh" -o -name "*.sub" \) -exec sed -i "s/\r$//" {} + && chmod +x scripts/cluster/*.sh && echo CRLF fixed'
 
 Write-Host ""
-Write-Host "Step 3 on cluster:"
-Write-Host "  Auto chain (1 GPU):  bash scripts/cluster/submit_pgd_chain.sh"
-Write-Host "  Parallel trial (2 GPU): bash scripts/cluster/submit_pgd_parallel_trial.sh"
-Write-Host "  Manual chunk:        bash scripts/cluster/submit_pgd_next.sh"
-Write-Host "  Progress:            bash scripts/cluster/check_pgd_progress.sh"
+Write-Host "Week 1 on cluster:"
+Write-Host "  bash scripts/cluster/submit_week1.sh"
+Write-Host "  docs/CLUSTER_WEEK1.md"

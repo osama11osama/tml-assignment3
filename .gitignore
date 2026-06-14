@@ -39,6 +39,10 @@ results/checkpoints/
 results/runs/
 results/logs/*.log
 
+# Checkpoint copies saved without .pt extension
+results/archive/*_final
+results/archive/trades_b8_resnet18_ep20_final
+
 # Report build artifacts (keep LaTeX sources)
 report/*.aux
 report/*.log
