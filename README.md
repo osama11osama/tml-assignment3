@@ -1,239 +1,310 @@
-# Trustworthy ML 2026 — Assignment 3: Adversarial Robustness
+# Trustworthy Machine Learning — Adversarial Robustness
 
-Train a ResNet image classifier that stays accurate on **clean** and **adversarially perturbed** 32×32 inputs (9 classes).
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-adversarial%20training-red)](https://pytorch.org/)
+[![Research](https://img.shields.io/badge/topic-adversarial%20robustness-purple)](#project-overview)
+[![Use](https://img.shields.io/badge/use-research%20%26%20education-orange)](#responsible-use--legal-notice)
 
-**Metric:** `Score = 0.5 × clean_accuracy + 0.5 × robustness_accuracy`  
-**Deadline:** 16 June 2026, 23:59 (leaderboard + CMS ZIP)  
-**Task ID:** `03-robustness`
+A research project for studying **adversarial robustness in image classification**.
 
-> **Private repo** — includes `_private/` learning docs and plans. Do not publish API keys or model weights.
+The project investigates how standard and adversarial training strategies affect the trade-off between clean accuracy and robustness against bounded adversarial perturbations. It was developed in an academic Trustworthy Machine Learning setting and is published as a **research, reproducibility, and portfolio artifact**.
 
-**Data:** [SprintML/tml26_task3](https://huggingface.co/datasets/SprintML/tml26_task3)  
-**Leaderboard:** http://34.63.153.158/leaderboard_page
-
----
-
-## Progress
-
-| Phase | Status |
-|-------|--------|
-| Step 0 — Setup, download, verify | **Done** |
-| Step 1 — Standard training baseline (ERM) | **Done** — LB **0.486371** (`docs/STEP1_ERM_RESULTS.md`) |
-| Step 2 — FGSM adversarial training | **Done** — unified 0.410 (warm-up only) |
-| Step 3 — PGD adversarial training | **Done** — 80 epochs; LB **0.575136** (`docs/STEP3_PGD_RESULTS.md`) |
-| Step 4 — TRADES β=6 fine-tune | **Done** — LB **0.575571** (`docs/SUBMISSION_SNAPSHOT.md`) |
-| **Best LB (current)** | **`trades_b8_resnet18.pt` — LB 0.582405** (`docs/TRADES_B8_RESULTS.md`, tag **`v1.2-submittable`**) |
-| v1.0 submittable (PGD-AT) | `pgd_at_resnet18.pt` — tag `v1.0-submittable` |
-| **Week 1 — TRADES sweeps + R34** | **β=8 won** — see `docs/CLUSTER_WEEK1.md` |
-| CMS report + ZIP | Not started |
+> This repository is intended for lawful education, research, benchmarking, and authorized ML-security evaluation only.
 
 ---
 
-## Step 0 — What was done (2026-06-11)
+## Project overview
 
-This step established the project infrastructure. **No model training yet** — only data, code layout, and validation.
+Modern neural networks can achieve strong accuracy while remaining sensitive to carefully constructed perturbations that are small under a chosen norm constraint.
 
-### 1. Environment
+This project explores the question:
 
-- Python virtual environment: `.venv/`
-- Dependencies: `requirements.txt` (torch, torchvision, numpy, huggingface_hub, requests, python-dotenv, …)
-- **GPU:** NVIDIA GeForce RTX 5060 Laptop GPU
-- **PyTorch:** `2.11.0+cu128` (CUDA 12.8) — required for adversarial training later
+> **How can we train a classifier that remains useful on clean data while becoming more resistant to adversarial examples?**
 
-If you recreate the venv, install the CUDA build explicitly:
+The experimental progression includes:
 
-```powershell
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
-pip install -r requirements.txt
+- standard empirical risk minimization (ERM);
+- FGSM adversarial training;
+- PGD adversarial training;
+- TRADES-style robust optimization;
+- robustness evaluation under iterative attacks;
+- comparison of clean/robust accuracy trade-offs;
+- reproducible experiment configurations and checkpoints.
+
+---
+
+## Why this matters
+
+Adversarial robustness is relevant to:
+
+- trustworthy machine learning;
+- safety-critical ML deployment;
+- robustness benchmarking;
+- secure perception systems;
+- model evaluation under worst-case perturbations;
+- understanding the difference between average-case accuracy and adversarial behavior.
+
+Adversarial examples are also a useful scientific tool for studying model decision boundaries and failure modes.
+
+---
+
+## Experimental setup
+
+The original task used small RGB images with 9 output classes and ResNet-family classifiers.
+
+The evaluation metric balanced clean and robust performance:
+
+```text
+score = 0.5 × clean_accuracy + 0.5 × robustness_accuracy
 ```
 
-### 2. Data download
-
-- Source: HuggingFace dataset `SprintML/tml26_task3`
-- Script: `scripts/download_data.py`
-- Output: `data/train.npz` (~127 MB, gitignored)
-
-**Dataset summary** (from `scripts/explore_data.py`):
-
-| Property | Value |
-|----------|-------|
-| Samples | 50,000 |
-| Image shape | `(N, 3, 32, 32)` — RGB, uint8 in file |
-| Preprocessing | divide by `255.0` → float in `[0, 1]` |
-| Classes | 9 (labels `0` … `8`) |
-| Class balance | min 4,424 / max 7,127 per class (ratio ≈ 0.62) |
-
-### 3. Code added
-
-| Path | Purpose |
-|------|---------|
-| `src/paths.py` | Repo paths, constants (`NUM_CLASSES=9`) |
-| `src/data.py` | Load `train.npz`, train/val `DataLoader` (90/10 split) |
-| `src/model.py` | `make_model()` for `resnet18` / `resnet34` / `resnet50` |
-| `scripts/download_data.py` | Download from HuggingFace → `data/train.npz` |
-| `scripts/explore_data.py` | Print dataset statistics |
-| `scripts/verify_setup.py` | End-to-end sanity checks |
-| `task_template.py` | Official-style load + model I/O + save checkpoint |
-| `submission.py` | Upload `.pt` to server; supports `--validate-only` and `.env` |
-| `.env.example` | Template for `TML_API_KEY` |
-
-Official HuggingFace copies of `task_template.py` / `submission.py` are kept in `hf_download/` for reference. The repo versions add path handling, validation, and dotenv support.
-
-### 4. Verification results
-
-All checks passed (`python scripts/verify_setup.py`):
-
-- `data/train.npz` loads correctly
-- Image tensor shape `(3, 32, 32)`, labels in `[0, 8]`
-- Train/val loaders: ~352 / ~40 batches (batch size 128)
-- All three architectures produce output shape `(1, 9)` on GPU
-- `task_template.py` saves `results/checkpoints/template_sanity.pt`
-- `submission.py --validate-only` accepts the sanity checkpoint
-
-### 5. What is NOT done yet
-
-- No trained model (only random-weights sanity checkpoint)
-- No adversarial attack or adversarial training code
-- No leaderboard upload
-- No CMS report
+This encourages models that do not maximize robustness by sacrificing all normal predictive performance.
 
 ---
 
-## Repository layout
+## Training approaches
 
+### 1. Standard training (ERM)
+
+A conventional clean-data baseline establishes how well the architecture performs without robustness-specific optimization.
+
+### 2. FGSM adversarial training
+
+Fast Gradient Sign Method (FGSM) provides a lightweight way to expose the model to adversarially perturbed samples during training.
+
+It is useful as a simple baseline, although single-step training can be insufficient against stronger iterative attacks.
+
+### 3. PGD adversarial training
+
+Projected Gradient Descent (PGD) adversarial training uses iterative perturbation generation and is a stronger robustness baseline.
+
+Conceptually:
+
+```text
+clean batch
+    ↓
+generate bounded adversarial examples with PGD
+    ↓
+train model on adversarial / mixed objective
+    ↓
+evaluate clean + robust accuracy
 ```
+
+### 4. TRADES
+
+TRADES explicitly optimizes the trade-off between natural accuracy and robustness by combining standard classification loss with a robustness-oriented divergence term.
+
+This repository includes multiple TRADES configurations and experiments with different beta values and model variants.
+
+---
+
+## Recorded experimental progress
+
+Examples of recorded results from the original evaluation environment include:
+
+| Experiment | Recorded result |
+|---|---:|
+| Standard ERM baseline | 0.486371 |
+| PGD adversarial training | 0.575136 |
+| TRADES β=6 | 0.575571 |
+| TRADES β=8 ResNet-18 | **0.582405** |
+
+These values belong to the original task/evaluation setup and should not be interpreted as universal robustness guarantees.
+
+Robustness numbers are meaningful only together with the exact:
+
+- attack parameters;
+- perturbation budget;
+- preprocessing;
+- dataset;
+- model checkpoint;
+- norm definition;
+- number of attack steps;
+- evaluation implementation.
+
+---
+
+## Repository structure
+
+```text
 tml-assignment3/
 ├── README.md
-├── SUBMIT.md
 ├── requirements.txt
 ├── .env.example
-├── Assignment_3_-_Robustness.pdf
-├── task_template.py
-├── submission.py
-├── src/
-│   ├── paths.py
-│   ├── data.py
-│   └── model.py
-├── scripts/
-│   ├── download_data.py
-│   ├── explore_data.py
-│   └── verify_setup.py
-├── data/
-│   └── train.npz              # gitignored — run download_data.py
-├── results/checkpoints/       # gitignored .pt files
-├── hf_download/               # HF cache (reference templates)
-├── _private/
-│   └── tools/
-│       ├── tml_submit_gui.py      # submit GUI + history
-│       └── launch_submit_gui.ps1
+├── configs/                 # experiment configurations
+├── src/                     # models, data and training utilities
+├── scripts/                 # training / evaluation workflows
+├── docs/                    # experiment and cluster notes
+├── results/                 # local/generated result structure
+└── hf_download/             # reference task helpers where applicable
 ```
+
+The repository also contains historical development notes from the original academic workflow. Before republishing or redistributing third-party course material, verify that you have the right to do so.
 
 ---
 
-## Submit GUI (same pattern as Assignment 2)
+## Getting started
 
-Desktop tool for uploading `.pt` checkpoints — validate, submit, cooldown, history, queue, leaderboard.
+Create and activate a Python environment:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File _private/tools/launch_submit_gui.ps1
-```
-
-| Feature | Assignment 2 | Assignment 3 |
-|---------|--------------|--------------|
-| Artifact | CSV (`id,score`) | `.pt` state_dict |
-| Extra field | — | `model_name` (resnet18/34/50) |
-| Scan folder | `results/submissions` | `results/checkpoints` |
-| Task ID | `19-stolen-model-detection` | `03-robustness` |
-| History path | `%APPDATA%\tml_submit_gui\task2\` | `%APPDATA%\tml_submit_gui\task3\` |
-
-The GUI reuses your **TML API key** from Assignment 1/2 settings if already saved.
-
----
-
-## Quick start (reproduce Step 0)
-
-```powershell
-cd tml-assignment3
+```bash
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
-pip install -r requirements.txt
-
-python scripts/download_data.py
-python scripts/explore_data.py
-python scripts/verify_setup.py
-python task_template.py
-
-copy .env.example .env          # add TML_API_KEY from CMS (for upload later)
-python submission.py --validate-only results/checkpoints/template_sanity.pt --model-name resnet18
 ```
 
-Expected final line from `verify_setup.py`:
-
-```
-All checks passed. Ready for baseline training (Stage 1).
-```
-
----
-
-## Step 1 results (2026-06-11)
-
-**Step 1 is NOT complete.** Only short tests were run. Full details: [`docs/STEP1_ERM_RESULTS.md`](docs/STEP1_ERM_RESULTS.md)
-
-| Run | Epochs | Clean (val) | Robust (PGD-20) | Unified | Status |
-|-----|--------|-------------|-----------------|---------|--------|
-| exp001 smoke | 2 | **55.34%** | 3.16% | 0.293 | Pipeline OK |
-| exp002 resume test | 3 | 40.86% | 6.22% | 0.235 | Resume OK; do not submit |
-| exp003 full ERM | 100 | — | — | — | **You still need to run this** |
-
-GPU verified: RTX 5060, PyTorch `2.11.0+cu128`, training uses `cuda`.
-
----
-
-## Step 1 — ERM baseline training (you run this)
-
-> **Policy:** Long GPU jobs (many epochs) are **run by you**, not started automatically by the agent.
-> Scripts save resume checkpoints every few epochs so a crash does not restart from epoch 1.
+Windows PowerShell:
 
 ```powershell
-# Start (100 epochs, saves resume ckpt every 5 epochs)
-python scripts/train_standard.py --device cuda --epochs 100 --save-every 5
-
-# If interrupted — continue from last saved epoch
-python scripts/train_standard.py --device cuda --epochs 100 --resume
-
-# After training
-python scripts/eval_model.py results/checkpoints/baseline_erm_resnet18.pt --architecture resnet18
-python submission.py --validate-only results/checkpoints/baseline_erm_resnet18.pt --model-name resnet18
+.\.venv\Scripts\Activate.ps1
 ```
 
-**Run folder** (`results/runs/erm_resnet18/`):
+Install PyTorch appropriate for your hardware, then install project dependencies:
 
-| File | Purpose |
-|------|---------|
-| `last.pt` | Full resume state (model + optimizer + epoch) |
-| `best.pt` | Best val-clean weights for submission |
-| `progress.json` | Metrics history + status (`running` / `finished`) |
+```powershell
+pip install torch torchvision
+pip install -r requirements.txt
+```
 
-**Console steps:** `[SETUP]` → `[TRAIN]` (batch %) → `[EVAL]` → `[SAVE]` → `[DONE]`
+For CUDA systems, use the PyTorch build that matches your installed environment.
 
-| Script | Purpose |
-|--------|---------|
-| `scripts/train_standard.py` | ERM training with resume |
-| `scripts/eval_model.py` | Clean + PGD robust eval |
-| `src/train_utils.py` | Shared checkpoint / progress helpers |
+The typical workflow is:
 
-## Next step — Step 2 (FGSM adversarial training)
-
-After ERM baseline completes: `scripts/train_fgsm_at.py` → then PGD-AT.
-
-For theory and full roadmap see `_private/AI cach/assignment3_master_guide.ipynb`.
+```text
+prepare authorized dataset
+        ↓
+verify preprocessing/model pipeline
+        ↓
+train clean baseline
+        ↓
+train adversarial variants
+        ↓
+evaluate clean and robust accuracy
+        ↓
+compare configurations
+```
 
 ---
 
-## Related repos
+## Configuration-driven experiments
 
-- [tml-assignment1](https://github.com/osama11osama/tml-assignment1) — Membership Inference
-- [tml-assignment2](https://github.com/osama11osama/tml-assignment2) — Stolen Model Detection
-- [tml-assignment3](https://github.com/osama11osama/tml-assignment3) — this repo (private)
+The repository contains configuration files for several training strategies, including:
+
+```text
+configs/
+├── standard_erm.yaml
+├── fgsm_at.yaml
+├── pgd_at.yaml
+├── pgd_at_extend.yaml
+├── trades_r18.yaml
+├── trades_b8.yaml
+├── trades_r34.yaml
+└── erm_r34.yaml
+```
+
+Keeping configurations separate from the implementation makes it easier to reproduce and compare experiments without changing code for every run.
+
+---
+
+## Reproducibility considerations
+
+Robust training is especially sensitive to implementation details. Results may change with:
+
+- random seed;
+- model initialization;
+- train/validation split;
+- optimizer and learning-rate schedule;
+- attack step size;
+- attack iteration count;
+- perturbation radius;
+- data augmentation;
+- batch size;
+- PyTorch/CUDA version;
+- GPU numerical behavior.
+
+For meaningful comparisons, record the full threat model and evaluation configuration rather than reporting only a single robustness number.
+
+---
+
+## Defensive perspective
+
+Adversarial robustness research helps developers avoid a common mistake: assuming that high clean accuracy implies reliable behavior under deliberate input manipulation.
+
+Practical lessons include:
+
+- define the threat model before claiming robustness;
+- evaluate with sufficiently strong attacks;
+- avoid reporting robustness against only the attack used during training;
+- watch for gradient masking or evaluation artifacts;
+- preserve clean accuracy measurements alongside robust accuracy;
+- test multiple attack settings when possible;
+- treat empirical robustness as conditional evidence, not a proof of security.
+
+No training method in this repository should be interpreted as making a model universally secure.
+
+---
+
+## Responsible use & legal notice
+
+This repository is provided for **lawful educational, academic, defensive, benchmarking, and authorized ML-security research purposes only**.
+
+By using the project, you are responsible for ensuring compliance with applicable laws, institutional rules, licenses, contracts, dataset terms, model terms, privacy requirements, and authorization scopes.
+
+You must not use this repository to:
+
+- attack or interfere with third-party systems without authorization;
+- bypass access controls or platform restrictions;
+- use adversarial techniques to cause harm or evade legitimate safety/security controls;
+- evaluate models or datasets you do not have permission to access;
+- misrepresent experimental robustness as a formal security guarantee;
+- treat publication of this repository as authorization to test third-party services.
+
+The author does **not** authorize unlawful, abusive, or unauthorized use and is not responsible for how third parties choose to use or modify this work.
+
+### Disclaimer of warranty and liability
+
+All software, configurations, research notes, experiments, and results are provided **"as is"**, without warranties or guarantees of any kind.
+
+Robustness results are environment- and threat-model-specific and may be incomplete, outdated, non-reproducible, or unsuitable for a particular operational purpose.
+
+To the maximum extent permitted by applicable law, the author shall not be liable for damages, claims, service disruption, model failure, data loss, financial loss, regulatory consequences, or other outcomes arising from use, misuse, modification, or redistribution of this project.
+
+Nothing in this repository constitutes legal advice, safety certification, or a guarantee that a model is secure. No disclaimer can guarantee complete exclusion of liability in every jurisdiction.
+
+---
+
+## Academic integrity
+
+This repository originated from academic work and is published for learning, reproducibility, and portfolio purposes.
+
+If you are currently taking a course with the same or a similar task:
+
+- follow your institution's academic-integrity rules;
+- do not submit this implementation or derived solutions as your own where reuse is prohibited;
+- cite reused code, experiments, and ideas where appropriate;
+- ask the course staff if consulting public repositories is allowed.
+
+A public repository does not override academic rules.
+
+---
+
+## Publication / copyright note
+
+Code written for this project can be documented and shared subject to the rights you hold in it. However, course PDFs, lecture/tutorial extracts, third-party datasets, model weights, and copied reference material may have separate copyright or redistribution terms.
+
+Before making the repository broadly public, review such files and remove anything you do not have permission to redistribute.
+
+---
+
+## Author
+
+**Osama Altamar**  
+Cybersecurity and software engineering — interests include adversarial machine learning, ML security, privacy, secure systems, and defensive research.
+
+GitHub: [@osama11osama](https://github.com/osama11osama)
+
+---
+
+## Related projects
+
+- [`tml-assignment1`](https://github.com/osama11osama/tml-assignment1) — membership inference / ML privacy
+- [`tml-assignment2`](https://github.com/osama11osama/tml-assignment2) — stolen/derived model detection
+- [`Sidechannel-timing-attack-starter`](https://github.com/osama11osama/Sidechannel-timing-attack-starter) — timing side-channel demonstration
